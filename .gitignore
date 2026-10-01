@@ -1,0 +1,11 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+outputs/
+# Saved third-party docs/rules stay local (public repo):
+docs/reference/*
+!docs/reference/README.md
+.DS_Store

@@ -1,0 +1,10 @@
+pandas>=2.2
+numpy>=1.26
+matplotlib>=3.8
+openai>=1.40
+python-dotenv>=1.0
+pytest>=8.0
+# Add when we get there (exact package names from official docs):
+# streamlit
+# contree SDK (Token Factory Sandboxes)
+# tavily-python
