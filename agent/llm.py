@@ -2,9 +2,9 @@
 
 Nemotron models on Token Factory are reasoning models: the final answer may be
 in `content`, with the thinking in a separate field -- and some integrations
-have seen `content` come back empty. We capture both. The exact name of the
-reasoning field is NOT verified yet: run scripts/hello_nemotron.py once, look
-at the raw output, and update _extract_reasoning() to match.
+have seen `content` come back empty. We capture both. Verified 2026-10-01:
+Nano returns `reasoning`; Super returns both `reasoning` and
+`reasoning_content`. `content` comes back with a leading newline.
 """
 from dataclasses import dataclass
 from typing import Any
@@ -28,7 +28,7 @@ def get_client() -> OpenAI:
 
 
 def _extract_reasoning(message) -> str | None:
-    for attr in ("reasoning_content", "reasoning"):   # TODO: confirm against a real response
+    for attr in ("reasoning_content", "reasoning"):
         val = getattr(message, attr, None)
         if val:
             return val
@@ -41,4 +41,4 @@ def chat(messages: list[dict], model: str, **kwargs) -> ChatReply:
         raise RuntimeError("No model ID given. Set MODEL_FAST / MODEL_REASONING in .env from the Token Factory catalog.")
     resp = get_client().chat.completions.create(model=model, messages=messages, **kwargs)
     msg = resp.choices[0].message
-    return ChatReply(content=msg.content or "", reasoning=_extract_reasoning(msg), raw=resp)
+    return ChatReply(content=(msg.content or "").strip(), reasoning=_extract_reasoning(msg), raw=resp)
