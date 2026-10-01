@@ -15,12 +15,13 @@ _Last updated: Oct 1, 2026_
 
 ## In progress
 - Sandbox hello world: scripts/hello_sandbox.py written; key + project ID verified, but account has no sandbox permissions. Beta access requested 2026-10-01, waiting.
-- Nemotron planner + interpreter (doesn't need sandboxes)
+- Nemotron planner + interpreter: working end to end on all 4 samples (`python -m scripts.audit_with_llm`). Planner flags the right line on lookahead (L18), leaky (L19), overfit (L36) and nothing on honest.
 
 ## Next
 1. When beta access lands: run `python -m scripts.hello_sandbox` (check access anytime via GET /sandboxes/v1/whoami → permissions)
 2. Implement agent/sandbox.py: run a strategy + attacks inside a sandbox, return JSON results
-3. Nemotron planner + interpreter
+3. Nano scan step (hard requirement: Nano for fast/cheap calls; currently only Super is used)
+4. Report UI + charts
 
 ## Decisions
 - Track: Coding & Agentic Engineering
@@ -33,4 +34,5 @@ _Last updated: Oct 1, 2026_
 - Overfit strategy audit takes ~17s (point-in-time re-runs a 279-config grid search). Parallel sandbox forks could fix this.
 - Honest strategy gets WARN on deflated Sharpe (not statistically significant) — correct on random data, but make sure the UI frames WARN as "not proven" rather than "broken."
 - contree-sdk 0.3.6 API differs from online docs (no contree_client; uses ContreeConfig/IAMAuth). Trust the installed package over docs/reference/contree-sdk.md.
+- Interpreter still explains overfit's signal_shift FAIL as lookahead (it's the weekday filter, see signal-shift issue above). Better fix is in the test: skip/annotate signal_shift when positions depend on calendar.
 - Which real price dataset has a license that allows a public repo?
