@@ -17,6 +17,13 @@ Orchestrator (agent/)
 Report: per-test verdict + evidence + reported vs honest equity curve
 ```
 
+## Sandbox execution (agent/sandbox.py)
+- Base image `backtest-auditor:base-pd3.0.6-np2.5.3`: `python:3.12-slim` + pinned pandas/numpy, built once (~14s) and reused (~0.3s lookup).
+- Each audit uploads `engine/*.py`, `attacks/*.py`, `user_strategy.py` and `prices.csv` to `/work`, runs `python -m attacks.cli`, and parses JSON between per-run nonce markers. ~3s per audit.
+- Nothing secret is uploaded; no host env vars reach the sandbox. The sandbox has internet access.
+- Failures come back as `SandboxAuditError(stage=load|contract|audit|timeout|sandbox)` with the traceback tail.
+- Stretch: checkpoint the prepared sandbox and fork one per attack in parallel.
+
 ## Principles
 - Numbers come only from deterministic tests (attacks/). The LLM may not invent or alter metrics.
 - Untrusted code never runs on the host.
@@ -36,4 +43,4 @@ Both LLM steps use JSON-schema structured output (`response_format={"type": "jso
 - **Cited lines are real:** `planner.verify_findings` checks each snippet is on its cited line (relocating or rejecting otherwise).
 - **Verdicts are deterministic:** the interpreter's verdicts are overwritten with the test results; disagreements are logged in `verdicts_overridden`.
 - **Numbers are checked:** every decimal/percentage in the explanation is matched against evidence metrics; misses go to `unverified_numbers`.
-- **Evidence contract:** `evidence.report_to_evidence` → plain JSON. The sandbox runner must return this exact shape.
+- **Evidence contract:** `attacks/evidence.report_to_evidence` → plain JSON. The sandbox runner must return this exact shape.

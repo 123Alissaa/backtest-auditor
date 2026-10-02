@@ -2,10 +2,10 @@
 import inspect
 import json
 
-from agent.evidence import report_to_evidence
 from agent.interpreter import unverified_numbers
 from agent.planner import verify_findings
 from agent.sanitize import strip_hints
+from attacks.evidence import report_to_evidence
 from attacks.runner import run_audit
 from engine.data import synthetic_prices
 from strategies import STRATEGIES
