@@ -24,7 +24,7 @@ def plot_shift(report, path: Path):
     shift = next(r for r in report.results if r.name == "signal_shift")
     fig, ax = plt.subplots(figsize=(9, 4.5))
     ax.plot(shift.curves["original"], label=f"Reported (Sharpe {shift.metrics['sharpe_original']:.2f})")
-    ax.plot(shift.curves["shifted"], label=f"Signal delayed 1 bar (Sharpe {shift.metrics['sharpe_shifted']:.2f})")
+    ax.plot(shift.curves["shifted"], label=f"Signal delayed {shift.metrics['delay']} (Sharpe {shift.metrics['sharpe_shifted']:.2f})")
     ax.set_yscale("log"); ax.set_title(f"{report.strategy}: reported vs. delayed signal")
     ax.set_ylabel("Equity (log scale)"); ax.legend(); fig.tight_layout()
     fig.savefig(path, dpi=130); plt.close(fig)

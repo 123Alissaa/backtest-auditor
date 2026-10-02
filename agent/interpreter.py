@@ -53,7 +53,7 @@ You receive: the numbered strategy code, an earlier audit plan (hypotheses, may 
 
 How to read the tests:
 - Timing convention: run() returns positions, and positions[t] is held from close[t-1] to close[t]. A position may only use data through close[t-1], so the FINAL signal must be shifted by one bar before it is returned. Shifting an intermediate feature (e.g. the moving average) while still comparing against today's close does NOT fix lookahead.
-- signal_shift FAIL = results collapse when the signal is delayed a bar; usually lookahead. Exception: strategies with calendar rules (e.g. only trading some weekdays) can also fail it because the delay moves trades to the wrong weekdays. Then say that, rather than claiming lookahead.
+- signal_shift FAIL = results collapse when the signal is delayed; that means lookahead. If its metrics say calendar_dependent: true, the strategy only trades some weekdays, so the delay was one week (same weekday) to keep those weekdays aligned; mention this briefly.
 - signal_shift PASS with point_in_time FAIL = a leaky FEATURE (e.g. a centered window): the future information survives one extra bar of delay. This pattern is expected for leakage, not a contradiction.
 - point_in_time FAIL = position[t] changed when future data was hidden. Definite use of future information (lookahead, leaky features, or parameters chosen on the full history).
 - walk_forward FAIL = the configuration picked on past data didn't hold up on unseen data (overfitting).

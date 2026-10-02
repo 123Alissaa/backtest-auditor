@@ -37,3 +37,25 @@ def test_overfitting_is_caught(seed):
     v = verdicts(run_audit(STRATEGIES["overfit"], synthetic_prices(seed=seed)))
     assert v["deflated_sharpe"] == "FAIL", v
     assert v["walk_forward"] in ("FAIL", "WARN"), v
+
+
+def _lookahead_on_mon_thu(prices):
+    """Lookahead bug plus a weekday filter: must still be caught."""
+    return STRATEGIES["lookahead"].run(prices) * prices.index.dayofweek.isin((0, 3))
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_signal_shift_keeps_weekdays_for_calendar_strategies(seed):
+    from attacks.signal_shift import signal_shift_test
+    prices = synthetic_prices(seed=seed)
+    overfit = signal_shift_test(STRATEGIES["overfit"].run, prices)
+    assert overfit.metrics["calendar_dependent"] and overfit.verdict != "FAIL", overfit.summary
+    sneaky = signal_shift_test(_lookahead_on_mon_thu, prices)
+    assert sneaky.metrics["calendar_dependent"] and sneaky.verdict == "FAIL", sneaky.summary
+
+
+@pytest.mark.parametrize("name", ["honest", "lookahead", "leaky"])
+def test_signal_shift_unchanged_for_everyday_strategies(name):
+    from attacks.signal_shift import signal_shift_test
+    r = signal_shift_test(STRATEGIES[name].run, synthetic_prices(seed=7))
+    assert not r.metrics["calendar_dependent"] and r.metrics["delay"] == "1 bar"

@@ -24,6 +24,9 @@ Report: per-test verdict + evidence + reported vs honest equity curve
 - Failures come back as `SandboxAuditError(stage=load|contract|audit|timeout|sandbox)` with the traceback tail.
 - Stretch: checkpoint the prepared sandbox and fork one per attack in parallel.
 
+## Deterministic tests: notes
+- signal_shift delays positions one bar; if positions are calendar-dependent (some weekdays >10% exposure, others <2%), it delays to the same weekday one week later instead, so weekday rules aren't mistaken for lookahead. Evidence records `calendar_dependent`, `delay`, `weekday_exposure`.
+
 ## Principles
 - Numbers come only from deterministic tests (attacks/). The LLM may not invent or alter metrics.
 - Untrusted code never runs on the host.
