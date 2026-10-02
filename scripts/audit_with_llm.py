@@ -61,7 +61,9 @@ def audit(name: str, seed: int, sandbox: bool = False) -> dict:
         print(f"  static L{h['line']} [{h['rule']}/{h['confidence']}] ({h['explained_by']}): {h['explanation']}")
     for r in plan["scan_review"]:
         print(f"  super review L{r['line']} {r['rule']}: {r['verdict']} - {r['reason']}")
-    print("PLAN:", plan["strategy_summary"])
+    print("PLAN:", plan["strategy_summary"], f"(attempts: {plan['attempts']})")
+    if plan["incomplete"]:
+        print("  !! plan still incomplete after retries:", plan["problems"])
     for f in plan["findings"]:
         print(f"  suspicious L{f['line']} [{f['concern']}]: {f['snippet'].strip()}")
     print("REPORT:", report["headline"])

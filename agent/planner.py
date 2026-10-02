@@ -118,13 +118,39 @@ def verify_findings(findings: list[dict], source: str) -> tuple[list[dict], list
         hits = [i for i, text in enumerate(lines, start=1) if snip and snip in _norm(text)]
         if len(hits) == 1:
             verified.append({**f, "line": hits[0], "line_corrected_from": line})
+            continue
+        # Garbled JSON can glue junk onto a snippet (seen: "sma = c.rolling(window).mean()}, {").
+        # If the snippet still contains the whole cited line, trust the line number.
+        cited = _norm(lines[line - 1]) if 1 <= line <= len(lines) else ""
+        if len(cited) >= 8 and cited in snip:
+            verified.append({**f, "snippet": lines[line - 1].strip(), "snippet_trimmed": True})
         else:
             rejected.append(f)
     return verified, rejected
 
 
+def plan_problems(plan: dict, clean_source: str, scan_hits: list[dict] | None = None) -> list[str]:
+    """Why a schema-valid plan is still unusable. Seen on Super 2026-10-02: plans with an empty
+    test_plan and no findings (~1 in 3 runs), and findings garbled inside the JSON (a second
+    finding swallowed into the first one's snippet). Both were broken responses, not judgments."""
+    problems = []
+    verified, rejected = verify_findings(plan.get("findings", []), clean_source)
+    if rejected or any(f.get("snippet_trimmed") for f in verified):
+        problems.append("some findings don't match the code (garbled or invented)")
+    tests = [t.get("test") for t in plan.get("test_plan", [])]
+    if sorted(tests) != sorted(TESTS):
+        problems.append(f"test_plan covers {sorted(tests)}, expected each of {TESTS} once")
+    if not plan.get("strategy_summary", "").strip():
+        problems.append("strategy_summary is empty")
+    reviewed = {(r.get("line"), r.get("rule")) for r in plan.get("scan_review", [])}
+    missing = [(h["line"], h["rule"]) for h in scan_hits or [] if (h["line"], h["rule"]) not in reviewed]
+    if missing:
+        problems.append(f"scan_review is missing {missing}")
+    return problems
+
+
 def plan_audit(clean_source: str, description: str | None = None, model: str | None = None,
-               scan_hits: list[dict] | None = None) -> dict:
+               scan_hits: list[dict] | None = None, max_attempts: int = 3) -> dict:
     """clean_source must already be passed through agent.sanitize.strip_hints.
     scan_hits: output of agent.scanner.static_scan, for the planner to confirm or dismiss."""
     user = "Numbered strategy code:\n\n" + numbered(clean_source)
@@ -132,10 +158,15 @@ def plan_audit(clean_source: str, description: str | None = None, model: str | N
         user = f"The author describes it as: {description}\n\n" + user
     hits_view = [{k: h[k] for k in ("line", "rule", "concern", "snippet")} for h in scan_hits or []]
     user += "\n\nStatic-check hits to review:\n" + (json.dumps(hits_view, indent=2) if hits_view else "(none)")
-    plan = chat_json(
-        [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-        model=model or settings.model_reasoning, schema=PLAN_SCHEMA, name="audit_plan", max_tokens=8000,
-    )
+    for attempt in range(1, max_attempts + 1):
+        plan = chat_json(
+            [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+            model=model or settings.model_reasoning, schema=PLAN_SCHEMA, name="audit_plan", max_tokens=8000,
+        )
+        problems = plan_problems(plan, clean_source, scan_hits)
+        if not problems:
+            break
+    plan["attempts"], plan["incomplete"], plan["problems"] = attempt, bool(problems), problems
     plan["findings"], plan["rejected_findings"] = verify_findings(plan.get("findings", []), clean_source)
     plan["model"] = model or settings.model_reasoning
     return plan

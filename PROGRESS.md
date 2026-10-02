@@ -21,7 +21,7 @@ _Last updated: Oct 2, 2026_
 ## Next
 1. Nano scan step (hard requirement: Nano for fast/cheap calls; currently only Super is used)
 2. Signal-shift calendar fix (see known issues)
-3. Report UI + charts (sandbox returns signal-shift curves for the chart)
+2. Report UI + charts (sandbox returns signal-shift curves for the chart)
 
 ## Decisions
 - Track: Coding & Agentic Engineering
@@ -33,7 +33,7 @@ _Last updated: Oct 2, 2026_
 - Signal-shift test can WARN/FAIL on calendar-dependent strategies (e.g. weekday filters) for reasons other than lookahead; the interpreter should consider this.
 - Overfit strategy audit takes ~17s (point-in-time re-runs a 279-config grid search). Parallel sandbox forks could fix this.
 - Honest strategy gets WARN on deflated Sharpe (not statistically significant) — correct on random data, but make sure the UI frames WARN as "not proven" rather than "broken."
-- Planner points to the lookahead line (L18) only ~2 in 4 runs (same before and after the scan change); overfit L36 ~3–4 in 4. Verdicts are unaffected (deterministic tests), but the UI highlights lines. Ideas: run the planner 2–3x and keep lines found by a majority, give the interpreter line hints from the point_in_time results, or try Ultra for planning.
+- Planner retries: Super returns a broken-but-schema-valid plan (empty test_plan, or a finding garbled into another's snippet) ~1 in 3 runs on lookahead. plan_problems() catches these and retries (up to 3 attempts); after the fix, 8/8 lookahead plans flag L17/L18, 8/8 overfit flag L36, 8/8 honest clean. Cost: retried audits take ~6–10s longer; ~1 in 8 lookahead plans is still incomplete after 3 tries (audit continues; plan marked incomplete).
 - Sandbox integrity limit: user code shares the CLI's process, so a deliberately hostile strategy could tamper with its own results (nonce markers stop casual forgery). The sandbox protects the host; a self-audit can only fool its author. Mention in README.
 - Overfit audit in sandbox ~15s; parallel forks (stretch) could cut it.
 - contree-sdk 0.3.6 API differs from online docs (no contree_client; uses ContreeConfig/IAMAuth). Trust the installed package over docs/reference/contree-sdk.md.
