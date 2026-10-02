@@ -15,6 +15,7 @@ _Last updated: Oct 2, 2026_
 
 ## In progress
 - Nemotron planner + interpreter: working end to end on all 4 samples (`python -m scripts.audit_with_llm`). Planner flags the right line on lookahead (L18), leaky (L19), overfit (L36) and nothing on honest.
+- Scan step: deterministic rules (agent/scanner.py) + Nano one-sentence explanations + Super scan_review (confirm/dismiss). Nano, plan and sandbox tests run in parallel: ~10–28s per audit.
 - Sandboxes beta access granted 2026-10-02. agent/sandbox.py runs all attacks inside a Token Factory Sandbox (`--sandbox` flag): ~3s per audit (~15s overfit); evidence matches local runs (floats within 1e-9). Crashes, missing run(), syntax errors, SystemExit, timeouts and forged output all handled.
 
 ## Next
@@ -32,6 +33,7 @@ _Last updated: Oct 2, 2026_
 - Signal-shift test can WARN/FAIL on calendar-dependent strategies (e.g. weekday filters) for reasons other than lookahead; the interpreter should consider this.
 - Overfit strategy audit takes ~17s (point-in-time re-runs a 279-config grid search). Parallel sandbox forks could fix this.
 - Honest strategy gets WARN on deflated Sharpe (not statistically significant) — correct on random data, but make sure the UI frames WARN as "not proven" rather than "broken."
+- Planner points to the lookahead line (L18) only ~2 in 4 runs (same before and after the scan change); overfit L36 ~3–4 in 4. Verdicts are unaffected (deterministic tests), but the UI highlights lines. Ideas: run the planner 2–3x and keep lines found by a majority, give the interpreter line hints from the point_in_time results, or try Ultra for planning.
 - Sandbox integrity limit: user code shares the CLI's process, so a deliberately hostile strategy could tamper with its own results (nonce markers stop casual forgery). The sandbox protects the host; a self-audit can only fool its author. Mention in README.
 - Overfit audit in sandbox ~15s; parallel forks (stretch) could cut it.
 - contree-sdk 0.3.6 API differs from online docs (no contree_client; uses ContreeConfig/IAMAuth). Trust the installed package over docs/reference/contree-sdk.md.

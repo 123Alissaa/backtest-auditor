@@ -9,7 +9,7 @@ import json
 import re
 
 from agent.config import settings
-from agent.llm import chat
+from agent.llm import chat_json
 from agent.sanitize import numbered
 
 TESTS = ["signal_shift", "point_in_time", "walk_forward", "deflated_sharpe"]
@@ -49,8 +49,22 @@ PLAN_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "scan_review": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "line": {"type": "integer"},
+                    "rule": {"type": "string"},
+                    "verdict": {"type": "string", "enum": ["confirmed", "dismissed"]},
+                    "reason": {"type": "string"},
+                },
+                "required": ["line", "rule", "verdict", "reason"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["strategy_summary", "searches_parameters", "findings", "test_plan"],
+    "required": ["strategy_summary", "searches_parameters", "findings", "test_plan", "scan_review"],
     "additionalProperties": False,
 }
 
@@ -73,6 +87,10 @@ Fields:
 - strategy_summary: 1-2 plain-English sentences on what the strategy trades and when. Never empty.
 - searches_parameters: true if the code tries multiple configurations (a grid, loop, or max/min over params) to pick what it trades.
 - findings: suspicious lines (may be empty).
+- scan_review: one entry per static-check hit you are given (empty list if none). The hits come from simple
+  pattern rules: the code on that line really matches the pattern, but whether it is a real problem depends on
+  context (e.g. a full-sample mean used only for reporting is fine). "confirmed" if it lets future data into
+  positions, else "dismissed", with a one-sentence reason. Confirmed hits should also appear in findings.
 - test_plan: one entry per test.
 
 Rules:
@@ -105,18 +123,19 @@ def verify_findings(findings: list[dict], source: str) -> tuple[list[dict], list
     return verified, rejected
 
 
-def plan_audit(clean_source: str, description: str | None = None, model: str | None = None) -> dict:
-    """clean_source must already be passed through agent.sanitize.strip_hints."""
+def plan_audit(clean_source: str, description: str | None = None, model: str | None = None,
+               scan_hits: list[dict] | None = None) -> dict:
+    """clean_source must already be passed through agent.sanitize.strip_hints.
+    scan_hits: output of agent.scanner.static_scan, for the planner to confirm or dismiss."""
     user = "Numbered strategy code:\n\n" + numbered(clean_source)
     if description:
         user = f"The author describes it as: {description}\n\n" + user
-    reply = chat(
+    hits_view = [{k: h[k] for k in ("line", "rule", "concern", "snippet")} for h in scan_hits or []]
+    user += "\n\nStatic-check hits to review:\n" + (json.dumps(hits_view, indent=2) if hits_view else "(none)")
+    plan = chat_json(
         [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-        model=model or settings.model_reasoning,
-        response_format={"type": "json_schema", "json_schema": {"name": "audit_plan", "schema": PLAN_SCHEMA, "strict": True}},
-        max_tokens=8000,
+        model=model or settings.model_reasoning, schema=PLAN_SCHEMA, name="audit_plan", max_tokens=8000,
     )
-    plan = json.loads(reply.content)
     plan["findings"], plan["rejected_findings"] = verify_findings(plan.get("findings", []), clean_source)
     plan["model"] = model or settings.model_reasoning
     return plan

@@ -1,4 +1,5 @@
-"""Full audit of a built-in sample strategy: Nemotron plan -> deterministic tests -> Nemotron explanation.
+"""Full audit of a built-in sample strategy:
+static scan -> (Nano explains hits | Super plans | tests run, in parallel) -> Super explains.
 
     python -m scripts.audit_with_llm --strategy leaky
     python -m scripts.audit_with_llm --strategy all --seed 11
@@ -12,12 +13,14 @@ import argparse
 import inspect
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from agent.interpreter import interpret
 from agent.planner import plan_audit
 from agent.sandbox import audit_in_sandbox
 from agent.sanitize import strip_hints
+from agent.scanner import explain_hits, static_scan
 from attacks.evidence import report_to_evidence
 from attacks.runner import run_audit
 from engine.data import synthetic_prices
@@ -31,18 +34,33 @@ def audit(name: str, seed: int, sandbox: bool = False) -> dict:
     source = strip_hints(inspect.getsource(mod))
     prices = synthetic_prices(seed=seed)
 
-    t0 = time.time()
-    plan = plan_audit(source, getattr(mod, "DESCRIPTION", None))
-    t1 = time.time()
-    if sandbox:
-        evidence = audit_in_sandbox(inspect.getsource(mod), prices)["evidence"]
-    else:
-        evidence = report_to_evidence(run_audit(mod, prices))
-    t2 = time.time()
-    report = interpret(source, evidence, plan)
-    t3 = time.time()
+    def timed(fn, *args, **kwargs):
+        t = time.time()
+        return fn(*args, **kwargs), time.time() - t
 
-    print(f"\n=== {name}  ->  {evidence['overall']}   (plan {t1 - t0:.1f}s | tests{' [sandbox]' if sandbox else ''} {t2 - t1:.1f}s | explain {t3 - t2:.1f}s)")
+    def run_tests():
+        if sandbox:
+            return audit_in_sandbox(inspect.getsource(mod), prices)["evidence"]
+        return report_to_evidence(run_audit(mod, prices))
+
+    t0 = time.time()
+    hits = static_scan(source)  # instant, deterministic; parses only
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_explain = pool.submit(timed, explain_hits, hits)
+        f_plan = pool.submit(timed, plan_audit, source, getattr(mod, "DESCRIPTION", None),
+                             scan_hits=[dict(h) for h in hits])
+        f_tests = pool.submit(timed, run_tests)
+        (hits, t_explain), (plan, t_plan), (evidence, t_tests) = f_explain.result(), f_plan.result(), f_tests.result()
+    report, t_interp = timed(interpret, source, evidence, plan)
+    total = time.time() - t0
+
+    where = " [sandbox]" if sandbox else ""
+    print(f"\n=== {name}  ->  {evidence['overall']}   (total {total:.1f}s | parallel: nano {t_explain:.1f}s, "
+          f"plan {t_plan:.1f}s, tests{where} {t_tests:.1f}s | explain {t_interp:.1f}s)")
+    for h in hits:
+        print(f"  static L{h['line']} [{h['rule']}/{h['confidence']}] ({h['explained_by']}): {h['explanation']}")
+    for r in plan["scan_review"]:
+        print(f"  super review L{r['line']} {r['rule']}: {r['verdict']} - {r['reason']}")
     print("PLAN:", plan["strategy_summary"])
     for f in plan["findings"]:
         print(f"  suspicious L{f['line']} [{f['concern']}]: {f['snippet'].strip()}")
@@ -55,7 +73,8 @@ def audit(name: str, seed: int, sandbox: bool = False) -> dict:
         print("  !! verdicts the LLM got wrong (overridden):", report["verdicts_overridden"])
     if report["unverified_numbers"]:
         print("  !! numbers not found in evidence:", report["unverified_numbers"])
-    return {"strategy": name, "seed": seed, "sandbox": sandbox, "plan": plan, "evidence": evidence, "report": report}
+    return {"strategy": name, "seed": seed, "sandbox": sandbox, "static_hits": hits, "plan": plan,
+            "evidence": evidence, "report": report}
 
 
 def main():

@@ -10,7 +10,7 @@ import json
 import re
 
 from agent.config import settings
-from agent.llm import chat
+from agent.llm import chat_json
 from agent.planner import TESTS
 from agent.sanitize import numbered
 
@@ -117,19 +117,17 @@ def unverified_numbers(text: str, evidence: dict) -> list[str]:
 def interpret(clean_source: str, evidence: dict, plan: dict | None = None, model: str | None = None) -> dict:
     plan_view = None
     if plan:
-        plan_view = {k: plan.get(k) for k in ("strategy_summary", "searches_parameters", "findings", "test_plan")}
+        keys = ("strategy_summary", "searches_parameters", "findings", "test_plan", "scan_review")
+        plan_view = {k: plan.get(k) for k in keys}
     user = (
         "Numbered strategy code:\n\n" + numbered(clean_source)
         + "\n\nAudit plan (hypotheses):\n" + json.dumps(plan_view, indent=2)
         + "\n\nEVIDENCE (source of truth):\n" + json.dumps(evidence, indent=2)
     )
-    reply = chat(
+    report = chat_json(
         [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-        model=model or settings.model_reasoning,
-        response_format={"type": "json_schema", "json_schema": {"name": "audit_report", "schema": REPORT_SCHEMA, "strict": True}},
-        max_tokens=8000,
+        model=model or settings.model_reasoning, schema=REPORT_SCHEMA, name="audit_report", max_tokens=8000,
     )
-    report = json.loads(reply.content)
 
     truth = {t["test"]: t["verdict"] for t in evidence["tests"]}
     n_lines = len(clean_source.splitlines())

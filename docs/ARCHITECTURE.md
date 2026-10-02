@@ -33,12 +33,17 @@ Report: per-test verdict + evidence + reported vs honest equity curve
 | Step | Model | Code | Why |
 |---|---|---|---|
 | Plan | `nvidia/nemotron-3-super-120b-a12b` | agent/planner.py | multi-step reasoning about code; ~5–10s |
-| Scan | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | not built yet | cheap, fast, high volume |
+| Scan | rules + `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | agent/scanner.py | rules (ast) find syntactic leak patterns instantly; Nano writes one sentence per hit (~2–3s, capped at 1500 tokens, falls back to rule text) |
 | Explain | `nvidia/nemotron-3-super-120b-a12b` | agent/interpreter.py | careful judgment on evidence; ~3–13s |
 
-Both LLM steps use JSON-schema structured output (`response_format={"type": "json_schema", "json_schema": {"name", "schema", "strict"}}`).
+Why Scan isn't an LLM checklist: tested 2026-10-02, a Nano (and Super) checklist scan found the lookahead/overfit lines only ~1 in 3 runs, took 3–54s, and Nano sometimes reasoned past 6000 tokens with no answer. Syntactic patterns (centered windows, negative shifts, bfill, full-sample stats/fits, i+1 indexing) are found by parsing the code; semantic bugs stay with the Super planner, which also reviews every rule hit (`scan_review`: confirmed/dismissed).
+
+Flow per audit: static scan (instant) → in parallel {Nano explains hits, Super plans, sandbox tests} → Super explains. ~10–28s total.
+
+All LLM steps use JSON-schema structured output via `agent.llm.chat_json` (handles Nano's empty-content quirk, retries bad JSON) (`response_format={"type": "json_schema", "json_schema": {"name", "schema", "strict"}}`).
 
 ## LLM guardrails (agent/)
+- **Rules can't hallucinate:** static hits come from parsing, and the snippet is the exact source line. Nano only restates the rule's fact for that line; it's told never to call code safe (judging is Super's job).
 - **No answer leaks:** `sanitize.strip_hints` blanks comments, docstrings, `PLANTED_BUG` and `NAME` before code reaches the model, keeping line numbers intact.
 - **Cited lines are real:** `planner.verify_findings` checks each snippet is on its cited line (relocating or rejecting otherwise).
 - **Verdicts are deterministic:** the interpreter's verdicts are overwritten with the test results; disagreements are logged in `verdicts_overridden`.
