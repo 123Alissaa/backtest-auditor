@@ -16,7 +16,8 @@ def _run(strategy: str) -> AppTest:
     return at.run()
 
 
-@pytest.mark.parametrize("name", ["lookahead", "leaky", "overfit", "honest"])
+@pytest.mark.parametrize("name", ["lookahead", "leaky", "overfit", "next_day", "weekly", "zscore", "honest",
+                                  "honest_rsi"])
 def test_sample_pages_render(name, monkeypatch):
     monkeypatch.delenv("LIVE_RUNS_ENABLED", raising=False)
     at = _run(name)

@@ -2,7 +2,7 @@
  "source": "\n\n\n\n\nimport pandas as pd\n\n\nDESCRIPTION = \"Long when price is above its 20-day average, otherwise in cash.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\n\ndef run(prices: pd.DataFrame, window: int = 20) -> pd.Series:\n    c = prices[\"close\"]\n    sma = c.rolling(window).mean()\n    signal = (c > sma).astype(float)\n    signal[sma.isna()] = 0.0\n    return signal",
  "static_hits": [],
  "plan": {
-  "strategy_summary": "The strategy goes long when the closing price is above its 20\u2011day simple moving average, otherwise it stays in cash.",
+  "strategy_summary": "The strategy goes long when the closing price exceeds its 20\u2011day simple moving average; otherwise it stays in cash.",
   "searches_parameters": false,
   "findings": [
    {
@@ -10,7 +10,7 @@
     "snippet": "signal = (c > sma).astype(float)",
     "concern": "lookahead",
     "severity": "high",
-    "explanation": "The signal compares today's close to an SMA that includes today's close, using information from the same bar to decide the position for that bar, which violates the engine's timing convention (look\u2011ahead bias)."
+    "explanation": "The SMA is computed with the current bar\u2019s close, so the signal uses same\u2011bar data, violating the close[t\u20111] information limit."
    }
   ],
   "test_plan": [
@@ -18,25 +18,25 @@
     "test": "signal_shift",
     "priority": "high",
     "expected_verdict": "FAIL",
-    "hypothesis": "Shifting positions by one extra bar will remove the look\u2011ahead advantage and cause a large drop in Sharpe, revealing the bias."
+    "hypothesis": "Delaying the signal by one bar removes the lookahead advantage and should cause a large drop in Sharpe."
    },
    {
     "test": "point_in_time",
     "priority": "high",
     "expected_verdict": "FAIL",
-    "hypothesis": "Because the signal uses the current close, changing close[t] while keeping earlier data fixed will alter position[t], violating point\u2011in\u2011time consistency."
+    "hypothesis": "Because the signal depends on the same\u2011bar close via the SMA, truncating the data or nudging close[t] will alter the generated position."
    },
    {
     "test": "walk_forward",
     "priority": "low",
     "expected_verdict": "N/A",
-    "hypothesis": "No parameter grid is declared (PARAM_GRID=None), so the walk\u2011forward test is not applicable."
+    "hypothesis": "No parameter grid is declared (PARAM_GRID is None), so there is nothing to search over."
    },
    {
     "test": "deflated_sharpe",
     "priority": "low",
-    "expected_verdict": "WARN",
-    "hypothesis": "On pure random\u2011walk data the deflated Sharpe will warn due to chance fluctuations, which is expected even for an honest strategy with only one trial."
+    "expected_verdict": "PASS",
+    "hypothesis": "Only one configuration is evaluated (N_TRIALS=1); on a random walk the deflated Sharpe test should not warn."
    }
   ],
   "scan_review": [],
@@ -52,7 +52,8 @@
    "cagr": 0.5055376165616681,
    "sharpe": 3.4286179253459825,
    "max_drawdown": -0.04484254044055924,
-   "total_return": 58.829601521212716
+   "total_return": 58.829601521212716,
+   "exposure": 0.4765873015873016
   },
   "tests": [
    {
@@ -79,17 +80,17 @@
    {
     "test": "point_in_time",
     "verdict": "FAIL",
-    "summary": "On 10 of 12 dates, the position changed when future data was hidden: the strategy uses information that wasn't available at decision time.",
+    "summary": "On 38 of 40 dates, the position changed when future data was hidden: the strategy uses information that wasn't available at decision time.",
     "metrics": {
-     "dates_checked": 12,
-     "violations": 10,
-     "violation_rate": 0.8333333333333334,
+     "dates_checked": 40,
+     "violations": 38,
+     "violation_rate": 0.95,
      "example_dates": [
+      "2016-03-07",
       "2016-04-18",
-      "2016-07-01",
-      "2017-08-23",
-      "2018-06-11",
-      "2018-10-05"
+      "2016-05-04",
+      "2016-06-09",
+      "2016-06-30"
      ]
     }
    },
@@ -7682,67 +7683,61 @@
   "delay": "1 bar"
  },
  "report": {
-  "headline": "The reported performance cannot be trusted because the strategy uses future information.",
+  "headline": "The reported performance cannot be trusted because the strategy relies on information that would not have been available at the time of the trade.",
   "tests": [
    {
     "test": "signal_shift",
     "verdict": "FAIL",
-    "explanation": "Delaying the signal by one bar caused the Sharpe ratio to fall from 3.43 to 0.14, showing the original results depended on data that was not yet available.",
+    "explanation": "Delaying the signal by one bar caused the Sharpe ratio to fall from 3.43 to 0.14, proving the original results depended on future data.",
     "lines": [
-     18,
-     20
+     18
     ]
    },
    {
     "test": "point_in_time",
     "verdict": "FAIL",
-    "explanation": "On 10 out of 12 dates the position changed when future data was hidden, confirming the strategy looks ahead.",
+    "explanation": "On 38 out of 40 examined dates the position changed when future data was concealed, confirming the strategy used information that was not yet known.",
     "lines": [
-     18,
-     20
+     18
     ]
    },
    {
     "test": "walk_forward",
     "verdict": "N/A",
-    "explanation": "No parameter search was defined, so there is nothing to walk forward.",
+    "explanation": "No parameter grid was defined, so there is nothing to evaluate across time periods; the test is not applicable.",
     "lines": []
    },
    {
     "test": "deflated_sharpe",
     "verdict": "PASS",
-    "explanation": "After adjusting for the single trial, the deflated Sharpe indicates 100% confidence the edge is real, but this means nothing if the returns are inflated by lookahead.",
+    "explanation": "With only one configuration tested, the deflated Sharpe metric shows 100% confidence the edge is real, assuming the returns are genuine.",
     "lines": []
    }
   ],
   "fixes": [
    {
-    "line": 18,
-    "fix": "signal = (c.shift(1) > sma.shift(1)).astype(float)"
-   },
-   {
     "line": 20,
-    "fix": "return signal"
+    "fix": "Change the return statement to shift the signal by one bar: return signal.shift(1).fillna(0)"
    }
   ],
-  "caveats": "This audit used synthetic data; a WARN result only means 'not proven', not 'broken'. The fix assumes a simple shift resolves the lookahead, but other subtle leaks could remain.",
+  "caveats": "The audit is limited to the provided price series; different data could yield different outcomes. A PASS on deflated_sharpe does not guarantee profitability if lookahead bias remains. No WARN flags were raised, so any lack of statistical proof is not indicated here.",
   "overall": "FAIL",
   "verdicts_overridden": [],
   "unverified_numbers": [],
   "model": "nvidia/nemotron-3-super-120b-a12b"
  },
  "timings": {
-  "scan": 0.0001800060272216797,
-  "tests": 2.8989949226379395,
-  "explain_hits": 3.814697265625e-06,
-  "plan": 8.32498812675476,
-  "report": 6.342112064361572
+  "scan": 0.0002002716064453125,
+  "tests": 2.854033946990967,
+  "explain_hits": 4.0531158447265625e-06,
+  "plan": 10.173951864242554,
+  "report": 7.266739845275879
  },
  "sandbox": true,
  "strategy": "lookahead",
  "seed": 7,
  "description": "Long when price is above its 20-day average, otherwise in cash.",
- "generated_at": "2026-10-06T13:04:23+00:00",
+ "generated_at": "2026-10-06T17:24:11+00:00",
  "models": {
   "fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
   "reasoning": "nvidia/nemotron-3-super-120b-a12b"
@@ -7753,9 +7748,9 @@
   "attempts": [
    {
     "round": 1,
-    "approach": "Shift both price and SMA by one bar",
-    "explanation": "Use prior close and prior SMA to avoid lookahead, ensuring signal uses only past data.",
-    "code": "import pandas as pd\n\nDESCRIPTION = \"Long when price is above its 20-day average, otherwise in cash.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 20) -> pd.Series:\n    c = prices[\"close\"]\n    sma = c.rolling(window).mean()\n    signal = (c.shift(1) > sma.shift(1)).astype(float)\n    signal[sma.shift(1).isna()] = 0.0\n    return signal\n",
+    "approach": "Lag close before SMA and comparison",
+    "explanation": "Shift the close series by one bar before computing the SMA and the signal, ensuring the decision uses only past data.",
+    "code": "import pandas as pd\n\nDESCRIPTION = \"Long when price is above its 20-day average, otherwise in cash.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 20) -> pd.Series:\n    c = prices[\"close\"]\n    c_lag = c.shift(1)\n    sma = c_lag.rolling(window).mean()\n    signal = (c_lag > sma).astype(float)\n    signal[sma.isna()] = 0.0\n    return signal\n",
     "problems": [],
     "evidence": {
      "overall": "WARN",
@@ -7791,9 +7786,9 @@
       {
        "test": "point_in_time",
        "verdict": "PASS",
-       "summary": "Positions were identical with the future hidden on all 12 dates checked.",
+       "summary": "Positions were identical with the future hidden on all 40 dates checked.",
        "metrics": {
-        "dates_checked": 12,
+        "dates_checked": 40,
         "violations": 0,
         "violation_rate": 0.0,
         "example_dates": []
@@ -15391,9 +15386,9 @@
    },
    {
     "round": 1,
-    "approach": "Compute SMA on lagged close series",
-    "explanation": "Calculate moving average on yesterday's close, then compare yesterday's close to its average.",
-    "code": "import pandas as pd\n\nDESCRIPTION = \"Long when price is above its 20-day average, otherwise in cash.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 20) -> pd.Series:\n    c = prices[\"close\"]\n    lagged = c.shift(1)\n    sma = lagged.rolling(window).mean()\n    signal = (lagged > sma).astype(float)\n    signal[sma.isna()] = 0.0\n    return signal\n",
+    "approach": "Compute signal then shift it forward one bar",
+    "explanation": "Generate the original signal and then shift it by one bar (and fill NaNs with 0) so that the position reflects information available at the prior close.",
+    "code": "import pandas as pd\n\nDESCRIPTION = \"Long when price is above its 20-day average, otherwise in cash.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 20) -> pd.Series:\n    c = prices[\"close\"]\n    signal = (c > c.rolling(window).mean()).astype(float)\n    signal = signal.shift(1).fillna(0.0)\n    return signal\n",
     "problems": [],
     "evidence": {
      "overall": "WARN",
@@ -15429,9 +15424,9 @@
       {
        "test": "point_in_time",
        "verdict": "PASS",
-       "summary": "Positions were identical with the future hidden on all 12 dates checked.",
+       "summary": "Positions were identical with the future hidden on all 40 dates checked.",
        "metrics": {
-        "dates_checked": 12,
+        "dates_checked": 40,
         "violations": 0,
         "violation_rate": 0.0,
         "example_dates": []
@@ -15461,24 +15456,21 @@
    }
   ],
   "accepted": 0,
-  "workspace": "a6470beb-95e8-4a87-9fa4-3c541172e5de",
-  "seconds": 16.1,
+  "workspace": "a121254f-5e95-4f1e-bcd3-16299a197ad0",
+  "seconds": 17.7,
   "diff": [
    "--- original",
    "+++ fixed",
-   "@@ -1,8 +1,2 @@",
-   " import pandas as pd",
-   " ",
-   "@@ -13,3 +7,2 @@",
+   "@@ -13,7 +7,7 @@",
    " ",
    " def run(prices: pd.DataFrame, window: int = 20) -> pd.Series:",
-   "@@ -17,4 +10,4 @@",
-   "     sma = c.rolling(window).mean()",
+   "     c = prices[\"close\"]",
+   "-    sma = c.rolling(window).mean()",
    "-    signal = (c > sma).astype(float)",
-   "-    signal[sma.isna()] = 0.0",
-   "+    signal = (c.shift(1) > sma.shift(1)).astype(float)",
-   "+    signal[sma.shift(1).isna()] = 0.0",
-   "     return signal"
+   "+    c_lag = c.shift(1)",
+   "+    sma = c_lag.rolling(window).mean()",
+   "+    signal = (c_lag > sma).astype(float)",
+   "     signal[sma.isna()] = 0.0"
   ]
  }
 }

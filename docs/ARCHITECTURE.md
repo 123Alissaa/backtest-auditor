@@ -29,6 +29,7 @@ Report: per-test verdict + evidence + reported vs honest equity curve
 - Stretch: checkpoint the prepared sandbox and fork one per attack in parallel.
 
 ## Deterministic tests: notes
+- point_in_time checks 40 dates (12 when the strategy declares PARAM_GRID, since each check re-runs the search). Depends only on the code, so results are reproducible.
 - signal_shift delays positions one bar; if positions are calendar-dependent (some weekdays >10% exposure, others <2%), it delays to the same weekday one week later instead, so weekday rules aren't mistaken for lookahead. Evidence records `calendar_dependent`, `delay`, `weekday_exposure`.
 
 ## Principles

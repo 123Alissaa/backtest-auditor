@@ -59,3 +59,29 @@ def test_signal_shift_unchanged_for_everyday_strategies(name):
     from attacks.signal_shift import signal_shift_test
     r = signal_shift_test(STRATEGIES[name].run, synthetic_prices(seed=7))
     assert not r.metrics["calendar_dependent"] and r.metrics["delay"] == "1 bar"
+
+
+# ---- real-world mistakes gallery ----
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_next_day_shift_minus_one_is_caught(seed):
+    v = verdicts(run_audit(STRATEGIES["next_day"], synthetic_prices(seed=seed)))
+    assert v["signal_shift"] == "FAIL" and v["point_in_time"] == "FAIL", v
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_weekly_bfill_is_caught_without_any_rule(seed):
+    v = verdicts(run_audit(STRATEGIES["weekly"], synthetic_prices(seed=seed)))
+    assert v["point_in_time"] == "FAIL", v
+
+
+@pytest.mark.parametrize("seed", SEEDS + [3, 11])
+def test_full_history_zscore_is_caught(seed):
+    v = verdicts(run_audit(STRATEGIES["zscore"], synthetic_prices(seed=seed)))
+    assert v["point_in_time"] == "FAIL", v
+
+
+@pytest.mark.parametrize("seed", SEEDS + [3, 11])
+def test_honest_rsi_never_fails(seed):
+    v = verdicts(run_audit(STRATEGIES["honest_rsi"], synthetic_prices(seed=seed)))
+    assert "FAIL" not in v.values(), v

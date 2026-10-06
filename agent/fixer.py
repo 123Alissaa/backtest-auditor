@@ -4,8 +4,11 @@
       -> each candidate runs all attacks in its own sandbox branch (parallel)
       -> accept the first that passes; otherwise feed the failures back for one more round
 
-The AI writes code, the tests decide. A fix is accepted only if the delay and
-hide-the-future tests PASS, nothing else FAILs, and the strategy still trades.
+The AI writes code, the tests decide. A fix is accepted only if the hide-the-future
+test PASSes (the definitive no-future-data check), nothing FAILs, and the strategy
+still trades. The delay test may WARN: on random data a short-term honest signal's
+Sharpe can move >0.3 when delayed by chance (seen: the correct minimal fix for the
+next_day sample was rejected for a delay-test WARN when PASS was required).
 Pre-checks stop "fixes" that change the strategy into something else.
 
 Scope: lookahead and leakage are code bugs and can be fixed in code. Overfitting
@@ -109,8 +112,8 @@ def precheck(code: str, original: str) -> list[str]:
 def accept(evidence: dict) -> list[str]:
     """Why sandbox evidence doesn't count as fixed. Empty list = fixed."""
     v = {t["test"]: t["verdict"] for t in evidence["tests"]}
-    reasons = [f"{t} is {v.get(t)}" for t in ("signal_shift", "point_in_time") if v.get(t) != "PASS"]
-    reasons += [f"{t} FAILs" for t, verdict in v.items() if verdict == "FAIL" and t not in ("signal_shift", "point_in_time")]
+    reasons = [] if v.get("point_in_time") == "PASS" else [f"point_in_time is {v.get('point_in_time')}"]
+    reasons += [f"{t} FAILs" for t, verdict in v.items() if verdict == "FAIL" and t != "point_in_time"]
     exposure = evidence["reported_metrics"].get("exposure")
     if exposure is not None and exposure < MIN_EXPOSURE:
         reasons.append(f"barely trades any more (in the market {exposure:.0%} of days)")

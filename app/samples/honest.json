@@ -2,7 +2,7 @@
  "source": "\nimport pandas as pd\n\n\nDESCRIPTION = \"50/200-day moving-average crossover, long when fast > slow.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\n\ndef positions_for(prices: pd.DataFrame, fast: int = 50, slow: int = 200) -> pd.Series:\n    c = prices[\"close\"]\n    signal = (c.rolling(fast).mean() > c.rolling(slow).mean()).astype(float)\n    return signal.shift(1).fillna(0.0)\n\n\ndef run(prices: pd.DataFrame) -> pd.Series:\n    return positions_for(prices, 50, 200)",
  "static_hits": [],
  "plan": {
-  "strategy_summary": "The strategy goes long when the 50-day moving average exceeds the 200-day moving average, using the signal from the previous day to avoid lookahead.",
+  "strategy_summary": "The strategy goes long when the 50-day moving average exceeds the 200-day moving average, using the signal from the previous bar to avoid lookahead.",
   "searches_parameters": false,
   "findings": [],
   "test_plan": [
@@ -10,25 +10,25 @@
     "test": "signal_shift",
     "priority": "high",
     "expected_verdict": "PASS",
-    "hypothesis": "If the code had lookahead, shifting positions an extra bar would destroy performance; the proper shift should leave performance unchanged."
+    "hypothesis": "Shifting positions an extra bar will not cause a large Sharpe drop because the signal already uses only data up to the previous bar."
    },
    {
     "test": "point_in_time",
     "priority": "high",
     "expected_verdict": "PASS",
-    "hypothesis": "Any use of future data would cause the signal at time t to change when close[t] is altered; since only past data are used, the signal remains stable."
+    "hypothesis": "Positions at time t depend only on data through t\u20111, so truncating the series and nudging close[t] will not alter them."
    },
    {
     "test": "walk_forward",
     "priority": "low",
     "expected_verdict": "N/A",
-    "hypothesis": "No parameter grid is declared, so the walk\u2011forward test is not applicable."
+    "hypothesis": "No parameter grid is declared (PARAM_GRID is None), therefore the walk\u2011forward test is not applicable."
    },
    {
     "test": "deflated_sharpe",
     "priority": "low",
-    "expected_verdict": "PASS",
-    "hypothesis": "With only one configuration tested, deflating the Sharpe for multiple trials does not penalize the strategy; on random\u2011walk data the Sharpe is near zero and the test passes."
+    "expected_verdict": "WARN",
+    "hypothesis": "With a single configuration the deflated Sharpe approximates the raw Sharpe; on random\u2011walk data this typically yields a warning due to low performance."
    }
   ],
   "scan_review": [],
@@ -44,7 +44,8 @@
    "cagr": -0.010514320342484562,
    "sharpe": -0.027690100449069135,
    "max_drawdown": -0.2849621807345917,
-   "total_return": -0.10030536120623834
+   "total_return": -0.10030536120623834,
+   "exposure": 0.43253968253968256
   },
   "tests": [
    {
@@ -71,9 +72,9 @@
    {
     "test": "point_in_time",
     "verdict": "PASS",
-    "summary": "Positions were identical with the future hidden on all 12 dates checked.",
+    "summary": "Positions were identical with the future hidden on all 40 dates checked.",
     "metrics": {
-     "dates_checked": 12,
+     "dates_checked": 40,
      "violations": 0,
      "violation_rate": 0.0,
      "example_dates": []
@@ -7668,60 +7669,52 @@
   "delay": "1 bar"
  },
  "report": {
-  "headline": "The strategy shows no lookahead bias, leakage, or overfitting, but its returns are not statistically significant.",
+  "headline": "The strategy shows no signs of lookahead bias, leakage, or overfitting, but its performance is not statistically proven.",
   "tests": [
    {
     "test": "signal_shift",
     "verdict": "PASS",
-    "explanation": "Delaying the signal by one bar hardly changed the Sharpe ratio (\u20110.03 \u2192 \u20110.01), indicating the code does not rely on future data; the shift occurs correctly on line 14.",
-    "lines": [
-     14
-    ]
+    "explanation": "Delaying the signal by one bar barely changed the Sharpe ratio (\u20110.03 \u2192 \u20110.01), indicating the strategy does not rely on future data.",
+    "lines": []
    },
    {
     "test": "point_in_time",
     "verdict": "PASS",
-    "explanation": "When future price data were hidden, the positions remained identical on all checked dates, confirming that only past information is used to compute the moving averages on line 13.",
-    "lines": [
-     13
-    ]
+    "explanation": "When future price information was hidden, the positions remained identical on all 40 dates checked, confirming the strategy uses only past data.",
+    "lines": []
    },
    {
     "test": "walk_forward",
     "verdict": "N/A",
-    "explanation": "No parameter grid is defined (PARAM_GRID is None on line 8), so there is nothing to validate across time periods; the test is not applicable.",
-    "lines": [
-     8
-    ]
+    "explanation": "No parameter search was defined, so the walk\u2011forward test is not applicable.",
+    "lines": []
    },
    {
     "test": "deflated_sharpe",
     "verdict": "WARN",
-    "explanation": "With only one configuration tested (N_TRIALS = 1 on line 7), the deflated Sharpe gives a 47% probability that the observed edge is real, which is below the 95% threshold for confidence; the negative Sharpe suggests the result could be due to chance.",
-    "lines": [
-     7
-    ]
+    "explanation": "The deflated Sharpe ratio is 0.47, meaning there is only a 47\u202f% chance the observed edge is real; with a single configuration this result is not statistically significant.",
+    "lines": []
    }
   ],
   "fixes": [],
-  "caveats": "The audit was performed on synthetic or limited data; a WARN on deflated_sharpe means the edge is not proven, not that the strategy is broken. No lookahead, leakage, or overfitting was detected.",
+  "caveats": "The audit was conducted on synthetic or limited data; a WARN on the deflated Sharpe does not imply a flaw, only that the edge is not proven. Passing the other tests does not guarantee profitability in live trading.",
   "overall": "WARN",
   "verdicts_overridden": [],
   "unverified_numbers": [],
   "model": "nvidia/nemotron-3-super-120b-a12b"
  },
  "timings": {
-  "scan": 0.00019788742065429688,
-  "tests": 5.630174875259399,
+  "scan": 0.00019693374633789062,
+  "tests": 4.013930082321167,
   "explain_hits": 2.6226043701171875e-06,
-  "plan": 5.425333023071289,
-  "report": 4.5379438400268555
+  "plan": 7.628154277801514,
+  "report": 6.405051946640015
  },
  "sandbox": true,
  "strategy": "honest",
  "seed": 7,
  "description": "50/200-day moving-average crossover, long when fast > slow.",
- "generated_at": "2026-10-06T13:04:06+00:00",
+ "generated_at": "2026-10-06T17:23:50+00:00",
  "models": {
   "fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
   "reasoning": "nvidia/nemotron-3-super-120b-a12b"

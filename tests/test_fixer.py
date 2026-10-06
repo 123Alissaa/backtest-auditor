@@ -47,6 +47,7 @@ def test_precheck_rejects(code, why):
 
 def test_accept_rules():
     assert accept(_ev()) == []
+    assert accept(_ev(shift="WARN")) == []                  # delay test is noisy for short-term honest signals
     assert accept(_ev(shift="FAIL")) and accept(_ev(pit="WARN"))
     assert accept(_ev(deflated="FAIL"))
     assert accept(_ev(exposure=0.01))                       # a "fix" that never trades is no fix
@@ -82,7 +83,8 @@ def test_loop_retries_with_feedback_then_accepts(monkeypatch):
 
 
 def test_saved_samples_are_fixable_or_explained():
-    for name, fixable in (("lookahead", True), ("leaky", True), ("overfit", False), ("honest", False)):
+    for name, fixable in (("lookahead", True), ("leaky", True), ("overfit", False), ("honest", False),
+                          ("next_day", True), ("weekly", True), ("zscore", True), ("honest_rsi", False)):
         s = json.loads((SAMPLES / f"{name}.json").read_text())
         assert eligibility(s["evidence"], s["plan"])[0] is fixable, name
 

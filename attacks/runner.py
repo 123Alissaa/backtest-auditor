@@ -26,7 +26,9 @@ def run_audit(strategy, prices: pd.DataFrame) -> AuditReport:
     reported = run_backtest(prices, strategy.run(prices)).metrics
     results = [
         signal_shift_test(strategy.run, prices),
-        point_in_time_test(strategy.run, prices),
+        # 40 dates catch small leaks (e.g. a full-history z-score flips positions only on some days); strategies
+        # with a parameter grid re-run their whole search per check, so they get 12. Depends only on the code.
+        point_in_time_test(strategy.run, prices, n_checks=12 if getattr(strategy, "PARAM_GRID", None) else 40),
         walk_forward_test(strategy, prices),
         deflated_sharpe_test(strategy, prices),
     ]

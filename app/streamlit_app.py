@@ -43,11 +43,15 @@ from agent.pipeline import AuditFailed, run_full_audit  # noqa: E402
 from engine.data import synthetic_prices  # noqa: E402
 
 SAMPLES_DIR = Path(os.getenv("BA_SAMPLES_DIR", ROOT / "app" / "samples"))
-SAMPLES = {  # display order: the most dramatic first
+SAMPLES = {  # display order: classic bugs, real-world mistakes, honest strategies
     "lookahead": "Lookahead: 50% a year?",
     "leaky": "Leaky: smoothed trend",
     "overfit": "Overfit: best of 279",
+    "next_day": "Next-day return: 64% a year?",
+    "weekly": "Weekly trend: Monday knows Friday",
+    "zscore": "Z-score: normalized with the future",
     "honest": "Honest: 50/200 crossover",
+    "honest_rsi": "Honest: RSI mean reversion",
 }
 CUSTOM = "Your own strategy"
 
@@ -470,8 +474,8 @@ def render_fix_result(fix: dict, before: dict, source: str, key: str):
         equity_chart(before["curves"]["dates"], ("Original (as reported)", "Fixed (honest)"),
                      before["curves"]["original"], best["curves"]["original"])
     st.caption(f"{len(attempts)} candidate fix(es) tested in parallel branches of one sandbox snapshot "
-               f"in {fix.get('seconds', 0):.0f}s. A fix counts only if the delay and hide-the-future tests pass, "
-               "nothing else fails, and the strategy still trades.")
+               f"in {fix.get('seconds', 0):.0f}s. A fix counts only if the hide-the-future test passes, no test fails, "
+               "and the strategy still trades.")
 
 
 def render_fix(result: dict, prices: pd.DataFrame, key: str):
@@ -553,8 +557,9 @@ HERO = """
 </div>
 """
 OPTIONS = list(SAMPLES) + [CUSTOM]
-PILL_LABELS = {"lookahead": "Lookahead 50%/yr", "leaky": "Leaky", "overfit": "Overfit", "honest": "Honest",
-               CUSTOM: "✎ Audit your own code"}
+PILL_LABELS = {"lookahead": "Lookahead 50%/yr", "leaky": "Leaky", "overfit": "Overfit",
+               "next_day": "shift(-1) slip", "weekly": "Weekly bfill", "zscore": "Full-history z-score",
+               "honest": "Honest SMA", "honest_rsi": "Honest RSI", CUSTOM: "✎ Audit your own code"}
 
 
 def _pick(widget_key: str):
@@ -587,8 +592,8 @@ def main():
                    "has a real edge on it.")
 
     st.markdown(HERO, unsafe_allow_html=True)
-    st.pills("Try an example", OPTIONS, key="pick_pills", on_change=_pick, args=("pick_pills",),
-             format_func=lambda k: PILL_LABELS[k])
+    st.pills("Try an example: classic bugs · real-world mistakes · honest strategies", OPTIONS, key="pick_pills",
+             on_change=_pick, args=("pick_pills",), format_func=lambda k: PILL_LABELS[k])
 
     if choice != CUSTOM:
         result = load_sample(choice)

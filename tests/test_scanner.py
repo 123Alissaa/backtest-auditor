@@ -58,7 +58,10 @@ def test_samples():
     found = {name: [(h["line"], h["rule"]) for h in static_scan(strip_hints(inspect.getsource(m)))]
              for name, m in STRATEGIES.items()}
     # Only the syntactic bug is a rule hit; lookahead/overfit are semantic and left to the planner.
-    assert found == {"honest": [], "lookahead": [], "leaky": [(19, "centered_window")], "overfit": []}
+    assert {n: [r for _, r in hits] for n, hits in found.items()} == {
+        "honest": [], "lookahead": [], "leaky": ["centered_window"], "overfit": [],
+        "next_day": ["negative_shift"], "weekly": [], "zscore": ["full_sample_stat"], "honest_rsi": []}
+    assert found["leaky"] == [(19, "centered_window")]
 
 
 def test_hit_snippets_are_on_their_lines():

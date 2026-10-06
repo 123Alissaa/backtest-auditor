@@ -2,55 +2,48 @@
  "source": "\n\n\n\n\n\n\nfrom itertools import combinations\n\nimport pandas as pd\n\nfrom engine.backtest import run_backtest\n\n\nDESCRIPTION = \"Optimized moving-average crossover with a weekday filter (best of ~280 configs).\"\n\n\n_WEEKDAY_SETS = [days for r in range(1, 6) for days in combinations(range(5), r)]\nPARAM_GRID = [\n    {\"fast\": f, \"slow\": s, \"days\": days}\n    for f in (5, 10, 20)\n    for s in (50, 100, 200)\n    for days in _WEEKDAY_SETS\n]\nN_TRIALS = len(PARAM_GRID)\n\n\ndef positions_for(prices: pd.DataFrame, fast: int, slow: int, days: tuple) -> pd.Series:\n    c = prices[\"close\"]\n    trend_up = (c.rolling(fast).mean() > c.rolling(slow).mean()).astype(float)\n    pos = trend_up.shift(1).fillna(0.0)\n    return pos * prices.index.dayofweek.isin(days)\n\n\ndef best_params(prices: pd.DataFrame) -> dict:\n    return max(PARAM_GRID, key=lambda p: run_backtest(prices, positions_for(prices, **p)).metrics[\"sharpe\"])\n\n\ndef run(prices: pd.DataFrame) -> pd.Series:\n    return positions_for(prices, **best_params(prices))",
  "static_hits": [],
  "plan": {
-  "strategy_summary": "The strategy goes long when the fast moving average exceeds the slow moving average, based on the prior day's crossover, and only on weekdays selected from a predefined set. It selects the fast/slow lengths and weekday combination that historically yielded the highest Sharpe ratio.",
+  "strategy_summary": "The strategy goes long when the fast moving average exceeds the slow moving average, shifted by one bar to avoid lookahead, and only holds positions on selected weekdays. The fast/slow MA lengths and weekday set are chosen by maximizing the in-sample Sharpe across approximately 280 combinations.",
   "searches_parameters": true,
   "findings": [
    {
     "line": 36,
-    "snippet": "     return max(PARAM_GRID, key=lambda p: run_backtest(prices, positions_for(prices, **p)).metrics[\"sharpe\"])",
+    "snippet": "    return max(PARAM_GRID, key=lambda p: run_backtest(prices, positions_for(prices, **p)).metrics[\"sharpe\"])",
     "concern": "overfitting",
     "severity": "high",
-    "explanation": "Parameter search uses the full history to pick the best configuration, causing look\u2011ahead bias in the selected parameters."
-   },
-   {
-    "line": 39,
-    "snippet": "def run(prices: pd.DataFrame) -> pd.Series:",
-    "concern": "overfitting",
-    "severity": "low",
-    "explanation": "Calls the overfitted parameter selector."
+    "explanation": "Parameters are selected by evaluating all configurations on the full price history, causing look\u2011ahead bias in parameter choice."
    },
    {
     "line": 40,
-    "snippet": "     return positions_for(prices, **best_params(prices))",
+    "snippet": "    return positions_for(prices, **best_params(prices))",
     "concern": "overfitting",
-    "severity": "low",
-    "explanation": "Uses the parameters chosen on the entire sample."
+    "severity": "high",
+    "explanation": "The run function applies the parameters chosen on the entire dataset, so any backtest uses future information to decide the trading rule."
    }
   ],
   "test_plan": [
    {
     "test": "signal_shift",
-    "priority": "normal",
+    "priority": "low",
     "expected_verdict": "PASS",
-    "hypothesis": "Sharpe will remain similar because the strategy already shifts its signal by one bar, so an additional shift only moves to older information."
+    "hypothesis": "Positions are already shifted by one bar; adding another shift should not materially change performance."
    },
    {
     "test": "point_in_time",
-    "priority": "normal",
+    "priority": "high",
     "expected_verdict": "FAIL",
-    "hypothesis": "Because parameters are chosen using the full history, truncating the data changes the best parameters and thus the position at time t."
+    "hypothesis": "Best parameters are chosen using the full history, so truncating data changes the selected parameters and thus the position at time t."
    },
    {
     "test": "walk_forward",
-    "priority": "normal",
+    "priority": "high",
     "expected_verdict": "FAIL",
-    "hypothesis": "The walk\u2011forward test will select parameters on the first 60% and evaluate on the remainder, but the strategy instead uses parameters chosen on the entire sample, leading to out\u2011of\u2011performance degradation."
+    "hypothesis": "Parameters optimized on the first 60% of data will likely overfit, causing degraded performance on the holdout period."
    },
    {
     "test": "deflated_sharpe",
-    "priority": "normal",
+    "priority": "low",
     "expected_verdict": "WARN",
-    "hypothesis": "With ~280 parameter combinations, the deflated Sharpe will penalize the Sharpe and typically produce a warning even on random\u2011walk data."
+    "hypothesis": "With ~280 parameter combinations, the deflated Sharpe will likely penalize the in-sample Sharpe, flagging it as insignificant even if the raw Sharpe appears high."
    }
   ],
   "scan_review": [],
@@ -66,7 +59,8 @@
    "cagr": 0.02766447422573637,
    "sharpe": 0.5175681787539982,
    "max_drawdown": -0.15538455349301283,
-   "total_return": 0.31375213479708486
+   "total_return": 0.31375213479708486,
+   "exposure": 0.09404761904761905
   },
   "tests": [
    {
@@ -7706,63 +7700,65 @@
   "delay": "1 week (same weekday)"
  },
  "report": {
-  "headline": "The strategy\u2019s reported returns cannot be trusted because it looks ahead and overfits its parameters.",
+  "headline": "The strategy\u2019s reported returns cannot be trusted because its performance depends on future information and overfitting to the data.",
   "tests": [
    {
     "test": "signal_shift",
     "verdict": "PASS",
-    "explanation": "Delaying the signal by one week (same weekday) barely changed performance (Sharpe 0.52 \u2192 0.47), showing the strategy only trades on Mondays and any lag simply moves trades to the same weekday a week later.",
+    "explanation": "Delaying the signal by one week (which keeps the same weekday because the strategy only trades Mondays) barely changed the Sharpe ratio (0.52 \u2192 0.47). This shows the signal itself does not use future data.",
     "lines": []
    },
    {
     "test": "point_in_time",
     "verdict": "FAIL",
-    "explanation": "On 4 of 12 dates the position changed when future data was hidden, meaning the strategy used information that was not available at decision time when it selected its parameters.",
-    "lines": [
-     36
-    ]
+    "explanation": "On four of twelve dates the position would have been different if future data were hidden, proving that the strategy looks ahead when choosing its parameters.",
+    "lines": []
    },
    {
     "test": "walk_forward",
     "verdict": "FAIL",
-    "explanation": "The best parameter set found on past data (Sharpe 0.76) dropped to 0.18 on unseen data, indicating the edge does not generalize out of sample.",
-    "lines": [
-     36
-    ]
+    "explanation": "The parameter set that performed best on past data (Sharpe 0.76) fell to a Sharpe of 0.18 on unseen data, indicating the edge does not generalize and is likely overfitted.",
+    "lines": []
    },
    {
     "test": "deflated_sharpe",
     "verdict": "FAIL",
-    "explanation": "After accounting for the 279 parameter combinations tried, there is only a 17% chance the observed Sharpe ratio is genuine; the result could easily arise by luck.",
-    "lines": [
-     36
-    ]
+    "explanation": "After accounting for the 279 parameter combinations tried, there is only a 17% chance the observed Sharpe is genuine; the result could easily arise from luck.",
+    "lines": []
    }
   ],
   "fixes": [
    {
     "line": 36,
-    "fix": "Replace the global parameter search with a rolling or expanding\u2011window selection so that best_params uses only data available up to each prediction point (e.g., compute parameters on an expanding window or use a walk\u2011forward scheme)."
+    "fix": "Replace the global maximisation with an expanding\u2011window or rolling\u2011window optimisation so that the best parameters are chosen only from data available up to each bar. For example:\n```python\ndef best_params_expanding(prices: pd.DataFrame) -> dict:\n    best = {}\n    for i in range(len(prices)):\n        subset = prices.iloc[:i+1]\n        best = max(PARAM_GRID, key=lambda p: run_backtest(subset, positions_for(subset, **p)).metrics['sharpe'])\n    return best\n```\nThen call this function in `run` instead of the current `best_params`."
+   },
+   {
+    "line": 40,
+    "fix": "Use the parameters produced by the expanding\u2011window function (or a rolling window) rather than the parameters fitted on the whole history. This ensures that any backtest uses only information that would have been known at the time."
+   },
+   {
+    "line": 18,
+    "fix": "To address the walk\u2011forward failure and the deflated Sharpe warning, drastically reduce the size of the parameter grid (e.g., fix the weekday set to a sensible choice or limit the MA lengths) so that fewer configurations are tested, decreasing the chance of overfitting and luck\u2011driven results."
    }
   ],
-  "caveats": "This audit relies on the supplied synthetic data and the deterministic tests implemented in the engine; a WARN would indicate \u2018not proven\u2019 rather than \u2018broken\u2019, and passing tests do not guarantee future performance in live markets.",
+  "caveats": "This audit assumes synthetic data and deterministic tests; a WARN would mean \u2018not proven\u2019 rather than \u2018broken\u2019. The fixes suggested are illustrative and would need to be implemented and re\u2011tested to confirm they remove the bias.",
   "overall": "FAIL",
   "verdicts_overridden": [],
   "unverified_numbers": [],
   "model": "nvidia/nemotron-3-super-120b-a12b"
  },
  "timings": {
-  "scan": 0.000431060791015625,
-  "tests": 14.950852870941162,
-  "explain_hits": 4.76837158203125e-06,
-  "plan": 15.136156797409058,
-  "report": 8.513415098190308
+  "scan": 0.0004749298095703125,
+  "tests": 15.704053163528442,
+  "explain_hits": 1.0013580322265625e-05,
+  "plan": 20.584290742874146,
+  "report": 11.76188588142395
  },
  "sandbox": true,
  "strategy": "overfit",
  "seed": 7,
  "description": "Optimized moving-average crossover with a weekday filter (best of ~280 configs).",
- "generated_at": "2026-10-06T13:05:22+00:00",
+ "generated_at": "2026-10-06T17:25:25+00:00",
  "models": {
   "fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
   "reasoning": "nvidia/nemotron-3-super-120b-a12b"

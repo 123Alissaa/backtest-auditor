@@ -7,12 +7,12 @@
    "rule": "centered_window",
    "concern": "leakage",
    "confidence": "high",
-   "explanation": "A centered rolling mean uses future and past bars, incorporating upcoming price data.",
+   "explanation": "Each centered rolling\u2011window value uses prices from both past and future bars, leaking future information.",
    "explained_by": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
   }
  ],
  "plan": {
-  "strategy_summary": "The strategy goes long when the smoothed 21\u2011day price trend is rising and short when it is falling, using a centered moving average to determine trend direction.",
+  "strategy_summary": "The strategy takes the sign of the day\u2011to\u2011day change of a 21\u2011day rolling mean of price (centered) and uses that signal from the prior day to decide whether to be long (+1), short (\u20111) or flat (0).",
   "searches_parameters": false,
   "findings": [
    {
@@ -20,7 +20,7 @@
     "snippet": "smooth = c.rolling(window, center=True).mean()",
     "concern": "leakage",
     "severity": "high",
-    "explanation": "The centered rolling mean incorporates future prices within the window, leaking forward\u2011looking information into the smooth series that propagates to the signal."
+    "explanation": "A centered rolling mean uses future prices inside its window, allowing forward\u2011looking information to enter the smoothed series and thus the generated signal."
    }
   ],
   "test_plan": [
@@ -28,25 +28,25 @@
     "test": "signal_shift",
     "priority": "low",
     "expected_verdict": "PASS",
-    "hypothesis": "Shifting the position by an extra bar does not remove the look\u2011ahead bias introduced by the centered window, so performance should remain largely unchanged."
+    "hypothesis": "Shifting the signal one extra bar does not remove the lookahead bias introduced by the centered window, so performance should remain largely unchanged."
    },
    {
     "test": "point_in_time",
     "priority": "high",
     "expected_verdict": "FAIL",
-    "hypothesis": "Because the smooth series uses future prices, altering a future close price will change the signal at earlier timestamps, violating the point\u2011in\u2011time property."
+    "hypothesis": "Because the centered rolling mean incorporates future close prices, altering close[t] changes the signal at time t, violating the point\u2011in\u2011time constraint."
    },
    {
     "test": "walk_forward",
     "priority": "low",
     "expected_verdict": "N/A",
-    "hypothesis": "No parameter grid is defined (PARAM_GRID is None), so there is nothing to search over and the walk\u2011forward test is not applicable."
+    "hypothesis": "No parameter grid is defined (PARAM_GRID is None), therefore the walk\u2011forward test is not applicable."
    },
    {
     "test": "deflated_sharpe",
     "priority": "low",
-    "expected_verdict": "PASS",
-    "hypothesis": "With only a single configuration (N_TRIALS=1), deflated Sharpe reduces to the raw Sharpe and will not flag overfitting on random\u2011walk data."
+    "expected_verdict": "WARN",
+    "hypothesis": "With only one configuration tested, deflated Sharpe \u2248 raw Sharpe; on random\u2011walk data this yields a low Sharpe ratio that triggers a warning even for honest code."
    }
   ],
   "scan_review": [
@@ -54,7 +54,7 @@
     "line": 19,
     "rule": "centered_window",
     "verdict": "confirmed",
-    "reason": "The centered rolling mean uses future prices within the window, leaking forward\u2011looking information into the smooth series, which propagates to the signal."
+    "reason": "The centered rolling mean uses future observations within its window, leaking forward\u2011looking data into the smoothed series and consequently into the signal."
    }
   ],
   "attempts": 1,
@@ -69,7 +69,8 @@
    "cagr": 0.6850475012361756,
    "sharpe": 3.0861631095989357,
    "max_drawdown": -0.14836257083726168,
-   "total_return": 183.55315786943103
+   "total_return": 183.55315786943103,
+   "exposure": 0.9916666666666667
   },
   "tests": [
    {
@@ -96,17 +97,17 @@
    {
     "test": "point_in_time",
     "verdict": "FAIL",
-    "summary": "On 12 of 12 dates, the position changed when future data was hidden: the strategy uses information that wasn't available at decision time.",
+    "summary": "On 40 of 40 dates, the position changed when future data was hidden: the strategy uses information that wasn't available at decision time.",
     "metrics": {
-     "dates_checked": 12,
-     "violations": 12,
+     "dates_checked": 40,
+     "violations": 40,
      "violation_rate": 1.0,
      "example_dates": [
+      "2016-03-07",
       "2016-04-18",
-      "2016-07-01",
-      "2016-10-17",
-      "2017-08-23",
-      "2018-06-11"
+      "2016-05-04",
+      "2016-06-09",
+      "2016-06-30"
      ]
     }
    },
@@ -7699,18 +7700,20 @@
   "delay": "1 bar"
  },
  "report": {
-  "headline": "The strategy\u2019s reported returns cannot be trusted because it uses future price information to generate its signals.",
+  "headline": "The strategy\u2019s reported performance cannot be trusted because it uses future information.",
   "tests": [
    {
     "test": "signal_shift",
     "verdict": "PASS",
-    "explanation": "Delaying the signal by one bar barely changed performance (Sharpe stayed around 3.09), showing the strategy\u2019s edge remains even when the signal is lagged, which indicates the original signal already incorporated future data via the centered moving average.",
-    "lines": []
+    "explanation": "Delaying the signal by one bar barely changed the results (Sharpe 3.09 \u2192 3.18), showing that the one\u2011bar shift did not remove the bias introduced by the centered window.",
+    "lines": [
+     19
+    ]
    },
    {
     "test": "point_in_time",
     "verdict": "FAIL",
-    "explanation": "On every date checked, altering a future close price changed the position at an earlier time, proving the strategy accessed information that was not yet available when making decisions.",
+    "explanation": "On all 40 dates checked, the position changed when future data was hidden, proving the strategy relies on information that was not available at decision time.",
     "lines": [
      19
     ]
@@ -7718,40 +7721,40 @@
    {
     "test": "walk_forward",
     "verdict": "N/A",
-    "explanation": "No parameter search was defined, so there is nothing to validate across time periods; the test is not applicable.",
+    "explanation": "No parameter grid was defined (PARAM_GRID is None), so there is nothing to evaluate across time periods.",
     "lines": []
    },
    {
     "test": "deflated_sharpe",
     "verdict": "PASS",
-    "explanation": "After adjusting for the single configuration tested, the deflated Sharpe equals 1.0, meaning the observed Sharpe could be attributed to luck given the number of trials; however, because other tests already revealed lookahead bias, this result does not guarantee a genuine edge.",
+    "explanation": "With only one configuration tested, the deflated Sharpe equals the raw Sharpe (100\u202f% confidence), but this does not prove the edge is genuine on random data.",
     "lines": []
    }
   ],
   "fixes": [
    {
     "line": 19,
-    "fix": "Replace the centered rolling mean with a past\u2011only rolling mean: change `smooth = c.rolling(window, center=True).mean()` to `smooth = c.rolling(window).mean()` (remove `center=True`). Keep the final `.shift(1)` as is."
+    "fix": "Replace the centered rolling mean with a non\u2011centered one: change `smooth = c.rolling(window, center=True).mean()` to `smooth = c.rolling(window).mean()`. Then keep the existing `trend = np.sign(smooth.diff()).shift(1).fillna(0.0)` so the signal uses only past data."
    }
   ],
-  "caveats": "The audit is based on deterministic tests on the supplied data; it does not prove the strategy would fail or succeed in live trading. A PASS on deflated_sharpe with a single trial only indicates the edge is not statistically proven, not that it is broken. Applying the fix removes the lookahead bias but does not guarantee profitability.",
+  "caveats": "The audit assumes synthetic or limited historical data; a PASS in deflated_sharpe with a single trial does not constitute statistical proof of robustness, and results may not generalize to live trading.",
   "overall": "FAIL",
   "verdicts_overridden": [],
   "unverified_numbers": [],
   "model": "nvidia/nemotron-3-super-120b-a12b"
  },
  "timings": {
-  "scan": 0.000202178955078125,
-  "tests": 3.040266990661621,
-  "explain_hits": 3.062941074371338,
-  "plan": 9.400362968444824,
-  "report": 7.141161918640137
+  "scan": 0.0001938343048095703,
+  "tests": 3.9007840156555176,
+  "explain_hits": 1.593766212463379,
+  "plan": 13.270581007003784,
+  "report": 8.993453025817871
  },
  "sandbox": true,
  "strategy": "leaky",
  "seed": 7,
  "description": "Trend-following on a smoothed 21-day price trend.",
- "generated_at": "2026-10-06T13:04:43+00:00",
+ "generated_at": "2026-10-06T17:24:37+00:00",
  "models": {
   "fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
   "reasoning": "nvidia/nemotron-3-super-120b-a12b"
@@ -7762,9 +7765,9 @@
   "attempts": [
    {
     "round": 1,
-    "approach": "Use trailing rolling window",
-    "explanation": "Removed center=True so the smooth uses only past prices, eliminating lookahead.",
-    "code": "import numpy as np\nimport pandas as pd\n\nDESCRIPTION = \"Trend-following on a smoothed 21-day price trend.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 21) -> pd.Series:\n    c = prices[\"close\"]\n    smooth = c.rolling(window).mean()\n    trend = np.sign(smooth.diff())\n    return trend.shift(1).fillna(0.0)\n",
+    "approach": "Use trailing rolling mean",
+    "explanation": "Remove center=True so the smoothed series uses only past and present prices, eliminating lookahead bias.",
+    "code": "import numpy as np\nimport pandas as pd\n\n\nDESCRIPTION = \"Trend-following on a smoothed 21-day price trend.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\n\ndef run(prices: pd.DataFrame, window: int = 21) -> pd.Series:\n    c = prices[\"close\"]\n    smooth = c.rolling(window).mean()\n    trend = np.sign(smooth.diff())\n    return trend.shift(1).fillna(0.0)\n",
     "problems": [],
     "evidence": {
      "overall": "WARN",
@@ -7800,9 +7803,9 @@
       {
        "test": "point_in_time",
        "verdict": "PASS",
-       "summary": "Positions were identical with the future hidden on all 12 dates checked.",
+       "summary": "Positions were identical with the future hidden on all 40 dates checked.",
        "metrics": {
-        "dates_checked": 12,
+        "dates_checked": 40,
         "violations": 0,
         "violation_rate": 0.0,
         "example_dates": []
@@ -15400,30 +15403,82 @@
    },
    {
     "round": 1,
-    "approach": "Shift centered window to align with past",
-    "explanation": "Applied a forward shift of half the window to the centered rolling mean so it reflects only historical data.",
-    "code": "import numpy as np\nimport pandas as pd\n\nDESCRIPTION = \"Trend-following on a smoothed 21-day price trend.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\ndef run(prices: pd.DataFrame, window: int = 21) -> pd.Series:\n    c = prices[\"close\"]\n    smooth = c.rolling(window, center=True).mean().shift(window // 2)\n    trend = np.sign(smooth.diff())\n    return trend.shift(1).fillna(0.0)\n",
-    "problems": [
-     "still contains centered_window (line 11)"
-    ],
-    "evidence": null,
+    "approach": "Replace with expanding mean",
+    "explanation": "Substitute the centered rolling mean with an expanding mean that only incorporates historical data, preventing future leakage.",
+    "code": "import numpy as np\nimport pandas as pd\n\n\nDESCRIPTION = \"Trend-following on a smoothed 21-day price trend.\"\n\nN_TRIALS = 1\nPARAM_GRID = None\n\n\ndef run(prices: pd.DataFrame, window: int = 21) -> pd.Series:\n    c = prices[\"close\"]\n    smooth = c.expanding().mean()\n    trend = np.sign(smooth.diff())\n    return trend.shift(1).fillna(0.0)\n",
+    "problems": [],
+    "evidence": {
+     "overall": "WARN",
+     "reported_metrics": {
+      "cagr": 0.0232468828190584,
+      "sharpe": 0.21804652983961692,
+      "max_drawdown": -0.48671624781648426,
+      "total_return": 0.2583582564978151,
+      "exposure": 0.9992063492063492
+     },
+     "tests": [
+      {
+       "test": "signal_shift",
+       "verdict": "PASS",
+       "summary": "Delaying the signal by 1 bar barely changed results (Sharpe 0.22 -> 0.20).",
+       "metrics": {
+        "sharpe_original": 0.21804652983961692,
+        "sharpe_shifted": 0.2019069350374642,
+        "cagr_original": 0.0232468828190584,
+        "cagr_shifted": 0.02030801897581247,
+        "lag_bars": 1,
+        "delay": "1 bar",
+        "calendar_dependent": false,
+        "weekday_exposure": {
+         "Mon": 0.998,
+         "Tue": 1.0,
+         "Wed": 1.0,
+         "Thu": 1.0,
+         "Fri": 0.998
+        }
+       }
+      },
+      {
+       "test": "point_in_time",
+       "verdict": "PASS",
+       "summary": "Positions were identical with the future hidden on all 40 dates checked.",
+       "metrics": {
+        "dates_checked": 40,
+        "violations": 0,
+        "violation_rate": 0.0,
+        "example_dates": []
+       }
+      },
+      {
+       "test": "walk_forward",
+       "verdict": "N/A",
+       "summary": "No parameter search declared, so there's nothing to walk forward.",
+       "metrics": {}
+      },
+      {
+       "test": "deflated_sharpe",
+       "verdict": "WARN",
+       "summary": "Confidence the edge is real is 75% (below 95%): results aren't statistically significant yet.",
+       "metrics": {
+        "dsr": 0.7546466585836134,
+        "n_trials": 1,
+        "sharpe_annual": 0.21804652983961692,
+        "luck_benchmark_sharpe_annual": 0.0
+       }
+      }
+     ]
+    },
     "curves": null,
-    "accepted": false
+    "accepted": true
    }
   ],
   "accepted": 0,
-  "workspace": "04b61c21-3493-453c-acda-678c4290a68a",
-  "seconds": 17.3,
+  "workspace": "bcf470f8-2d7c-485a-9f0e-24e62e2ee870",
+  "seconds": 13.2,
   "diff": [
    "--- original",
    "+++ fixed",
-   "@@ -1,10 +1,3 @@",
-   " import numpy as np",
-   " import pandas as pd",
-   " ",
-   "@@ -15,6 +8,5 @@",
-   " ",
-   " def run(prices: pd.DataFrame, window: int = 21) -> pd.Series:",
+   "@@ -18,3 +12,3 @@",
    "     c = prices[\"close\"]",
    "-    smooth = c.rolling(window, center=True).mean()",
    "+    smooth = c.rolling(window).mean()",
