@@ -17,6 +17,10 @@ Orchestrator (agent/)
 Report: per-test verdict + evidence + reported vs honest equity curve
 ```
 
+## Fix loop (agent/fixer.py)
+- `prepare_workspace()` snapshots base image + engine/attacks + prices once; `audit_variant()` runs each candidate fix in its own branch of that snapshot (parallel threads). This is Contree's Git-like branching.
+- Super writes 2 candidates per round (max 2 rounds); deterministic pre-checks run first; acceptance is decided only by sandbox evidence (+ still trading). Overfitting is out of scope by design.
+
 ## Sandbox execution (agent/sandbox.py)
 - Base image `backtest-auditor:base-pd3.0.6-np2.5.3`: `python:3.12-slim` + pinned pandas/numpy, built once (~14s) and reused (~0.3s lookup).
 - Each audit uploads `engine/*.py`, `attacks/*.py`, `user_strategy.py` and `prices.csv` to `/work`, runs `python -m attacks.cli`, and parses JSON between per-run nonce markers. ~3s per audit.

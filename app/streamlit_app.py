@@ -38,6 +38,7 @@ import pandas as pd  # noqa: E402
 from agent.config import settings  # noqa: E402
 from agent.interpreter import drop_noop_fixes  # noqa: E402
 from agent.limits import check_live_run, reserve_live_run  # noqa: E402
+from agent.fixer import diff_lines, eligibility, fix_strategy  # noqa: E402
 from agent.pipeline import AuditFailed, run_full_audit  # noqa: E402
 from engine.data import synthetic_prices  # noqa: E402
 
@@ -56,6 +57,11 @@ STEPS = [
     ("explain_hits", "Explain rule hits", "Nemotron Nano"),
     ("plan", "Plan the audit", "Nemotron Super"),
     ("report", "Write the report", "Nemotron Super"),
+]
+FIX_STEPS = [
+    ("workspace", "Sandbox snapshot", "Token Factory Sandbox, made once"),
+    ("round1", "Write 2 fixes and test each in its own branch", "Nemotron Super + parallel sandbox branches"),
+    ("round2", "Second attempt with the failures as feedback", "only if needed"),
 ]
 TESTS = {
     "signal_shift": ("Delay test", "Delays every trade. Honest results barely change; peeking ones collapse."),
@@ -111,6 +117,14 @@ CSS = """
 .ba-step {display: flex; gap: 10px; align-items: baseline; font-size: .9rem; padding: 2px 0;}
 .ba-step .t {opacity: .6; margin-left: auto; font-variant-numeric: tabular-nums;}
 .ba-step .who {opacity: .6; font-size: .8rem;}
+.ba-diff {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; line-height: 1.5;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 8px; padding: 6px 0; overflow-x: auto;}
+.ba-diff div {white-space: pre; padding: 0 12px;}
+.ba-diff .add {background: color-mix(in srgb, #0ca30c 16%, transparent);}
+.ba-diff .del {background: color-mix(in srgb, #d03b3b 16%, transparent);}
+.ba-diff .hunk {opacity: .5;}
+.ba-attempt {display: flex; gap: 10px; align-items: baseline; padding: 4px 0; font-size: .9rem;}
+.ba-attempt .why {opacity: .7; font-size: .82rem;}
 .stTextArea textarea {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;}
 </style>
 """
@@ -166,36 +180,36 @@ def render_steps(timings: dict, saved_at: str | None = None):
         st.caption(f"Saved audit from {saved_at}: same pipeline as a live run, shown instantly.")
 
 
-def run_live(source: str, prices: pd.DataFrame) -> dict | None:
-    """Run the audit in a worker thread; stream step updates from the main thread."""
+def run_with_progress(label: str, steps: list, work) -> dict | None:
+    """Run work(on_step) in a worker thread; stream step updates from the main thread."""
     events: queue.Queue = queue.Queue()
     out: dict = {}
 
-    def work():
+    def target():
         try:
-            out["result"] = run_full_audit(source, prices, on_step=lambda n, s, t: events.put((n, s, t)))
+            out["result"] = work(lambda n, s, t: events.put((n, s, t)))
         except Exception as e:  # surfaced below
             out["error"] = e
 
-    worker = threading.Thread(target=work, daemon=True)
+    worker = threading.Thread(target=target, daemon=True)
     worker.start()
-    state = {k: ("waiting", None) for k, _, _ in STEPS}
-    with st.status("Auditing your strategy…", expanded=True) as box:
+    state = {k: ("waiting", None) for k, _, _ in steps}
+    icons = {"waiting": "○", "running": "◌", "done": "✓", "error": "✕"}
+    with st.status(label, expanded=True) as box:
         slot = st.empty()
         while worker.is_alive() or not events.empty():
             while not events.empty():
                 n, s, t = events.get()
                 state[n] = (s, t)
-            icons = {"waiting": "○", "running": "◌", "done": "✓", "error": "✕"}
             slot.markdown("".join(
                 f'<div class="ba-step">{icons[state[k][0]]} <b>{name}</b> <span class="who">{who}</span>'
                 f'<span class="t">{"" if state[k][1] is None else f"{state[k][1]:.1f}s"}</span></div>'
-                for k, name, who in STEPS), unsafe_allow_html=True)
+                for k, name, who in steps), unsafe_allow_html=True)
             time.sleep(0.2)
         if "error" in out:
-            box.update(label="Audit stopped", state="error")
+            box.update(label="Stopped", state="error")
         else:
-            box.update(label="Audit complete", state="complete", expanded=False)
+            box.update(label="Done", state="complete", expanded=False)
 
     err = out.get("error")
     if isinstance(err, AuditFailed):
@@ -208,6 +222,11 @@ def run_live(source: str, prices: pd.DataFrame) -> dict | None:
         st.error(f"Something went wrong: {type(err).__name__}: {err}")
         return None
     return out["result"]
+
+
+def run_live(source: str, prices: pd.DataFrame) -> dict | None:
+    return run_with_progress("Auditing your strategy…", STEPS,
+                             lambda on_step: run_full_audit(source, prices, on_step=on_step))
 
 
 # ---------- the report ----------
@@ -246,10 +265,13 @@ def _log_ticks(lo: float, hi: float) -> list[float]:
 
 def render_chart(result: dict):
     curves = result["curves"]
-    delay = curves.get("delay", "1 bar")
-    names = ("Reported", f"Trades delayed {delay}")
-    df = pd.DataFrame({"date": pd.to_datetime(curves["dates"]), names[0]: curves["original"],
-                       names[1]: curves["shifted"]})
+    equity_chart(curves["dates"], ("Reported", f"Trades delayed {curves.get('delay', '1 bar')}"),
+                 curves["original"], curves["shifted"])
+
+
+def equity_chart(dates: list, names: tuple, first: list, second: list):
+    """Two equity curves on a log scale (categorical slots 1-2), with hover, end labels and a table view."""
+    df = pd.DataFrame({"date": pd.to_datetime(dates), names[0]: first, names[1]: second})
     long = df.melt("date", var_name="series", value_name="equity")
     mode = "dark" if getattr(st.context.theme, "type", "light") == "dark" else "light"
     colors = SERIES[mode]
@@ -390,7 +412,75 @@ def render_how(result: dict):
                            file_name="backtest_audit.json", mime="application/json")
 
 
-def render_report(result: dict):
+def _verdicts(ev: dict) -> dict:
+    return {t["test"]: t["verdict"] for t in ev["tests"]}
+
+
+def render_fix_result(fix: dict, before: dict, source: str, key: str):
+    attempts = fix["attempts"]
+    for a in attempts:
+        color, icon, _ = status_html("PASS" if a["accepted"] else "FAIL")
+        why = "all tests pass" if a["accepted"] else "; ".join(a["problems"])
+        st.markdown(f'<div class="ba-attempt">{icon}<span>Round {a["round"]}: <b>{html.escape(a["approach"])}</b>'
+                    f'</span><span class="why">{html.escape(why)}</span></div>', unsafe_allow_html=True)
+    if fix["accepted"] is None:
+        st.warning(f"No fix passed every test after {max(a['round'] for a in attempts)} rounds. "
+                   "The failures above show what still uses future information.")
+        return
+    best = attempts[fix["accepted"]]
+    st.success(f"**Fixed and proven:** {best['explanation']}")
+
+    after = best["evidence"]
+    bm, am = before["reported_metrics"], after["reported_metrics"]
+    bv, av = _verdicts(before), _verdicts(after)
+    rows = [("Yearly return", f"{bm['cagr']:.1%}", f"{am['cagr']:.1%}"),
+            ("Sharpe", f"{bm['sharpe']:.2f}", f"{am['sharpe']:.2f}")]
+    rows += [(TESTS[t][0], bv.get(t, "?"), av.get(t, "?")) for t in TESTS]
+    if am.get("exposure") is not None and bm.get("exposure") is not None:
+        rows.append(("In the market", f"{bm['exposure']:.0%}", f"{am['exposure']:.0%}"))
+    left, right = st.columns([2, 3])
+    left.markdown("**Before vs. after** (numbers from the sandbox, not the AI)")
+    left.dataframe(pd.DataFrame(rows, columns=["", "Original", "Fixed"]), hide_index=True, width="stretch")
+    with right:
+        st.markdown("**What changed**")
+        cls = lambda ln: "add" if ln.startswith("+") else "del" if ln.startswith("-") else "hunk" if ln.startswith("@@") else ""  # noqa: E731
+        body = "".join(f'<div class="{cls(ln)}">{html.escape(ln) or " "}</div>'
+                       for ln in diff_lines(source, best["code"]) if not ln.startswith(("+++", "---")))
+        st.markdown(f'<div class="ba-diff">{body}</div>', unsafe_allow_html=True)
+        st.download_button("Download fixed strategy", best["code"], file_name="fixed_strategy.py",
+                           mime="text/x-python", key=f"dl_{key}")
+    if best.get("curves") and before.get("curves"):
+        st.markdown("**Original reported equity vs. the fixed strategy**")
+        equity_chart(before["curves"]["dates"], ("Original (as reported)", "Fixed (honest)"),
+                     before["curves"]["original"], best["curves"]["original"])
+    st.caption(f"{len(attempts)} candidate fix(es) tested in parallel branches of one sandbox snapshot "
+               f"in {fix.get('seconds', 0):.0f}s. A fix counts only if the delay and hide-the-future tests pass, "
+               "nothing else fails, and the strategy still trades.")
+
+
+def render_fix(result: dict, prices: pd.DataFrame, key: str):
+    st.markdown("##### 🛠 Fix it: Nemotron rewrites the code, the sandbox proves it")
+    ok, reason = eligibility(result["evidence"], result["plan"])
+    if not ok:
+        st.info(reason)
+        return
+    fix = st.session_state.get(key) or result.get("fix")
+    before = {**result["evidence"], "curves": result["curves"]}
+    if fix is None:
+        st.caption("Nemotron Super writes two minimal fixes; each runs all four tests in its own branch of a "
+                   "sandbox snapshot. If neither passes, it tries again with the failures as feedback.")
+        if live_button("Fix it", result["source"], key=f"btn_{key}"):
+            fix = run_with_progress("Fixing the strategy…", FIX_STEPS, lambda on_step: fix_strategy(
+                result["source"], result["evidence"], result["plan"], prices, on_step=on_step))
+            if fix:
+                st.session_state[key] = fix
+    if fix:
+        if key not in st.session_state:
+            st.caption(f"Saved fix from {result.get('generated_at', 'an earlier run')}.")
+        render_fix_result(fix, before, result["source"], key)
+
+
+def render_report(result: dict, prices: pd.DataFrame | None = None, fix_key: str = "fix"):
     render_banner(result)
     render_metrics(result)
     st.markdown("##### Reported results vs. the same trades delayed")
@@ -401,6 +491,8 @@ def render_report(result: dict):
     render_cards(result)
     st.markdown("##### Where in the code")
     render_code(result)
+    if prices is not None:
+        render_fix(result, prices, fix_key)
     render_how(result)
     caveats = result["report"].get("caveats")
     if caveats:
@@ -463,7 +555,10 @@ def main():
             live = run_live(sample_source(STRATEGIES[choice]), default_prices(result.get("seed", 7)))
             if live:
                 st.session_state[live_key] = live
-        render_report(st.session_state.get(live_key, result))
+                st.session_state.pop(f"fix_{choice}_live", None)
+        shown = st.session_state.get(live_key, result)
+        which = "live" if live_key in st.session_state else "saved"
+        render_report(shown, default_prices(result.get("seed", 7)), fix_key=f"fix_{choice}_{which}")
         return
 
     st.markdown("### Audit your own strategy")
@@ -487,8 +582,10 @@ def main():
         live = run_live(code, prices)
         if live:
             st.session_state["live_custom"] = live
+            st.session_state["live_custom_prices"] = prices
+            st.session_state.pop("fix_custom", None)
     if "live_custom" in st.session_state:
-        render_report(st.session_state["live_custom"])
+        render_report(st.session_state["live_custom"], st.session_state["live_custom_prices"], fix_key="fix_custom")
 
 
 main()

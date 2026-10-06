@@ -31,4 +31,5 @@ def run_backtest(prices: pd.DataFrame, positions: pd.Series, cost_bps: float = 1
     turnover = pos.diff().abs().fillna(pos.abs())
     strat = pos * asset_ret - turnover * cost_bps / 1e4
     equity = (1 + strat).cumprod()
-    return BacktestResult(returns=strat, equity=equity, metrics=summarize(strat))
+    exposure = float((pos != 0).mean())  # share of days with a position; a "fix" that never trades is no fix
+    return BacktestResult(returns=strat, equity=equity, metrics={**summarize(strat), "exposure": exposure})

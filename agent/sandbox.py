@@ -115,6 +115,32 @@ def parse_cli_output(res: SandboxResult, nonce: str, timeout_s: int) -> dict:
     return json.loads(res.stdout.split(begin, 1)[1].split(end, 1)[0])
 
 
+def prepare_workspace(prices: pd.DataFrame):
+    """Snapshot = base image + our engine/attacks code + prices in /work (Contree branching).
+
+    Every strategy variant then runs in its own branch of this snapshot, in parallel,
+    without re-uploading anything but the strategy file. ~3s, once per fix session."""
+    files = _our_code()
+    files[f"{WORKDIR}/prices.csv"] = prices.to_csv(float_format="%.17g").encode()  # %.17g: exact float round-trip
+    ws = ensure_base_image().run(shell="true", files=files, cwd=WORKDIR, disposable=False).wait()
+    if ws.exit_code != 0 or not ws.uuid:
+        raise SandboxAuditError("Preparing the sandbox workspace failed.", "setup", ws.stderr or "")
+    return ws
+
+
+def audit_variant(workspace, strategy_source: str, timeout_s: int = 300) -> dict:
+    """Run all attacks on one strategy variant in a fresh branch of `workspace`."""
+    nonce = secrets.token_hex(16)
+    r = workspace.run(command="python", args=["-m", "attacks.cli", "--strategy", "user_strategy.py",
+                                              "--prices", "prices.csv"],
+                      files={f"{WORKDIR}/user_strategy.py": strategy_source.encode()}, cwd=WORKDIR,
+                      env={"AUDIT_NONCE": nonce}, timeout=timeout_s, truncate_output_at=MAX_OUTPUT_BYTES).wait()
+    out = parse_cli_output(SandboxResult(r.stdout or "", r.stderr or "", r.exit_code), nonce, timeout_s)
+    if not out.get("ok"):
+        raise SandboxAuditError(out.get("error", "Unknown error"), out.get("stage", "audit"), out.get("traceback", ""))
+    return {"evidence": out["evidence"], "curves": out["curves"]}
+
+
 def audit_in_sandbox(strategy_source: str, prices: pd.DataFrame, timeout_s: int = 300) -> dict:
     """Run all attacks on untrusted strategy code inside a sandbox.
 
