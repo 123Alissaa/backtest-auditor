@@ -24,7 +24,14 @@ class Settings:
     daily_live_run_cap: int = int(os.getenv("DAILY_LIVE_RUN_CAP", "30"))     # across all visitors
     session_live_run_cap: int = int(os.getenv("SESSION_LIVE_RUN_CAP", "3"))  # per browser session
     max_code_bytes: int = int(os.getenv("MAX_CODE_BYTES", "20000"))
-    daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "0.20"))    # hard stop on measured LLM spend/day
+    daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "0.15"))    # hard stop on measured LLM spend/day
+    # Judging window (Dec 1-15): more headroom so judges don't hit "used up". Worst case from Oct 6:
+    # 55 days x $0.15 + 15 days x $0.75 = $19.50 < ~$24.5 credit, so the balance can't go negative.
+    judging_from: str = os.getenv("JUDGING_FROM", "2026-12-01")
+    judging_until: str = os.getenv("JUDGING_UNTIL", "2026-12-15")
+    judging_daily_budget_usd: float = float(os.getenv("JUDGING_DAILY_BUDGET_USD", "0.75"))
+    judging_daily_run_cap: int = int(os.getenv("JUDGING_DAILY_RUN_CAP", "100"))
+    judging_session_run_cap: int = int(os.getenv("JUDGING_SESSION_RUN_CAP", "5"))
     # USD per million tokens (input, output), from GET /v1/models?verbose=true on 2026-10-06.
     # Unknown models are priced at the most expensive Nemotron (Ultra) so the budget errs on the safe side.
     model_prices: tuple = (

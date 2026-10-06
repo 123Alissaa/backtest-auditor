@@ -103,8 +103,8 @@ The sandbox tests run first, and paid AI calls start only if the code runs, so b
 ## Cost guards
 
 - **Measured spend:** token usage × catalog price goes into a daily ledger.
-- **Hard caps:** live runs stop at **$0.20/day**; there are also 30 runs/day, 3 per visitor, and a cut-off after judging.
-- **Free browsing:** the gallery uses saved audits and makes no paid calls.
+- **Hard caps:** live runs stop at **$0.15/day** ($0.75/day during judging, Dec 1–15); there are also run caps per day and per visitor, and a cut-off after judging. Worst case ≈ $20 in total, below the account's credit.
+- **Free browsing:** the gallery uses saved audits and makes no paid calls. A scheduled GitHub Action keeps the app awake through judging.
 - **Measured costs:** one audit ≈ $0.003, one fix ≈ $0.002.
 
 ## Run locally

@@ -5,7 +5,7 @@ from agent.config import Settings
 from agent.limits import check_live_run, reserve_live_run, runs_today
 
 ON = replace(Settings(), live_runs_enabled=True, live_runs_until="2099-01-01", daily_live_run_cap=2,
-             session_live_run_cap=3, max_code_bytes=100)
+             session_live_run_cap=3, max_code_bytes=100, judging_from="2099-01-01", judging_until="2099-01-02")
 
 
 def test_live_runs_off_by_default(tmp_path, monkeypatch):
@@ -71,3 +71,17 @@ def test_chat_records_measured_spend(tmp_path, monkeypatch):
     monkeypatch.setattr(llm, "get_client", lambda: fake)
     llm.chat([], model="nvidia/nemotron-3-super-120b-a12b")
     assert round(limits.spend_today(tmp_path / "c.json"), 6) == round((10_000 * 0.30 + 2_000 * 0.90) / 1e6, 6)
+
+
+
+def test_judging_window_raises_caps_and_worst_case_stays_under_credit():
+    from datetime import date, timedelta
+    from agent.limits import caps_for
+    cfg = Settings()
+    before, during, after = date(2026, 11, 30), date(2026, 12, 8), date(2026, 12, 16)
+    assert caps_for(before, cfg).budget_usd == 0.15 and caps_for(before, cfg).session_runs == 3
+    assert caps_for(during, cfg).budget_usd == 0.75 and caps_for(during, cfg).daily_runs == 100
+    assert caps_for(during, cfg).session_runs == 5 and caps_for(after, cfg).budget_usd == 0.15
+    start, end = date(2026, 10, 6), date.fromisoformat(cfg.live_runs_until)
+    worst = sum(caps_for(start + timedelta(d), cfg).budget_usd for d in range((end - start).days + 1))
+    assert worst < 22, worst                          # remaining credit ~$24.5: the balance can't go negative

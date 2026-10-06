@@ -39,6 +39,8 @@ _Last updated: Oct 6, 2026_
 
 - Demo video script (docs/reference/DEMO_SCRIPT.md (local only), 2:50, ~330 words) and Devpost submission text (docs/reference/SUBMISSION.md (local only): description, testing instructions, feedback) written Oct 6.
 
+- Judging-day protection (Oct 6): .github/workflows/keep-awake.yml opens the site every 4 h until Dec 16 (scripts/keep_awake.py; no paid calls). Budget now $0.15/day before judging, $0.75/day + 100 runs/day + 5 per visitor during Dec 1-15; worst case $19.65 total from Oct 6 < ~$24.5 credit.
+
 ## In progress
 - Alissa: record + upload video (public YouTube), submit on Devpost
 

@@ -1,0 +1,20 @@
+# Keeps the public demo awake through judging (Dec 1–15, 2026) by opening it in a real browser.
+# Free on public repos. Makes no paid API calls (the landing page uses saved audits).
+name: keep-awake
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"   # every 4 hours, at minute 17
+  workflow_dispatch: {}       # "Run workflow" button for a manual check
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright==1.* && python -m playwright install --with-deps chromium
+      - run: python -m scripts.keep_awake

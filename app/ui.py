@@ -557,7 +557,7 @@ GUIDE = """
   `positions_for(prices, **params)` so the overfitting tests can check the search.
 - Allowed imports: `pandas`, `numpy`, the standard library. Up to 20 KB of code.
 - Your code runs **only** inside an isolated Nebius Token Factory Sandbox, never on this server.
-  Each visitor gets 3 live audits.
+  Each visitor gets a few live audits.
 """
 
 

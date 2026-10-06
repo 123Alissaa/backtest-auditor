@@ -8,8 +8,9 @@ visitors), under the per-session cap, and within the code-size limit.
 
 Spend is measured, not estimated: agent.llm.chat reports each response's token
 usage, priced per model (config.model_prices), into a shared daily ledger file.
-Worst case = daily budget x days until LIVE_RUNS_UNTIL (e.g. $0.20 x ~70 = $14),
-which must stay below the remaining credit so the balance never goes negative.
+Worst case = budget x days: $0.15/day until Dec 1, then $0.75/day during judging
+(Dec 1-15) = ~$19.50 from Oct 6, below the remaining credit so the balance never goes
+negative. During judging the run caps are higher too (100/day, 5 per session).
 A server restart resets the ledger; restarts happen after idle periods, when
 nothing is being spent. The kill switch (LIVE_RUNS_ENABLED) is the real off button.
 """
@@ -72,6 +73,20 @@ def record_spend(usd: float, path: Path = COUNTER_FILE) -> None:
         path.write_text(json.dumps(led))
 
 
+@dataclass
+class Caps:
+    budget_usd: float
+    daily_runs: int
+    session_runs: int
+
+
+def caps_for(day: date, cfg=settings) -> Caps:
+    """Limits in force on `day`: higher during the judging window."""
+    if date.fromisoformat(cfg.judging_from) <= day <= date.fromisoformat(cfg.judging_until):
+        return Caps(cfg.judging_daily_budget_usd, cfg.judging_daily_run_cap, cfg.judging_session_run_cap)
+    return Caps(cfg.daily_budget_usd, cfg.daily_live_run_cap, cfg.session_live_run_cap)
+
+
 def check_live_run(session_runs: int, code: str = "", cfg=settings, path: Path = COUNTER_FILE) -> Decision:
     """Can this visitor start a live audit right now? Does not reserve a slot."""
     if not cfg.live_runs_enabled:
@@ -81,18 +96,20 @@ def check_live_run(session_runs: int, code: str = "", cfg=settings, path: Path =
         return Decision(False, "Live audits have ended for this demo.")
     if len(code.encode()) > cfg.max_code_bytes:
         return Decision(False, f"Strategy code is limited to {cfg.max_code_bytes // 1000} KB.")
-    if session_runs >= cfg.session_live_run_cap:
-        return Decision(False, f"You've used all {cfg.session_live_run_cap} live audits for this session.")
-    if runs_today(path) >= cfg.daily_live_run_cap or spend_today(path) >= cfg.daily_budget_usd:
+    caps = caps_for(_today(), cfg)
+    if session_runs >= caps.session_runs:
+        return Decision(False, f"You've used all {caps.session_runs} live audits for this session.")
+    if runs_today(path) >= caps.daily_runs or spend_today(path) >= caps.budget_usd:
         return Decision(False, "Today's live audits for this demo are used up. Try again tomorrow.")
     return Decision(True)
 
 
 def reserve_live_run(cfg=settings, path: Path = COUNTER_FILE) -> bool:
     """Atomically take one slot of today's global cap. Call right before starting a live audit."""
+    caps = caps_for(_today(), cfg)
     with _LOCK:
         led = _ledger(path)
-        if led["count"] >= cfg.daily_live_run_cap or led["spend"] >= cfg.daily_budget_usd:
+        if led["count"] >= caps.daily_runs or led["spend"] >= caps.budget_usd:
             return False
         led["count"] += 1
         path.write_text(json.dumps(led))
