@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: Oct 2, 2026_
+_Last updated: Oct 6, 2026_
 
 ## Done
 - Repo scaffold, CLAUDE.md, requirements checklist, MIT license
@@ -15,14 +15,19 @@ _Last updated: Oct 2, 2026_
 - Sandboxes (access 2026-10-02): agent/sandbox.py runs all attacks inside a Token Factory Sandbox (`--sandbox`): ~3s per audit (~15s overfit); evidence matches local runs (floats within 1e-9). Crashes, missing run(), syntax errors, SystemExit, timeouts and forged output all handled.
 - Scan step: deterministic rules (agent/scanner.py) + Nano one-sentence explanations + Super scan_review (confirm/dismiss). Nano, plan and sandbox tests run in parallel: ~10–28s per audit.
 - Signal-shift calendar fix: weekday-only strategies are detected from their positions and delayed one week (same weekday) instead of one bar. Overfit's signal_shift is now PASS (was a false FAIL); lookahead + weekday filter is still caught.
-- Tests: 59 offline + 7 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
+- Report UI (app/streamlit_app.py): sample picker + "your own strategy", verdict banner, metric tiles, reported-vs-delayed equity chart (validated palette, light + dark), four test cards, code view with flagged lines + fixes, "how this was checked" (Super's predictions vs actual, Nano explanations, guardrail counts, JSON download). Deep links: `?strategy=leaky`.
+- Shared pipeline (agent/pipeline.py): tests run in the sandbox FIRST, paid LLM calls only after they succeed.
+- Cost guards (agent/limits.py): live runs OFF unless LIVE_RUNS_ENABLED=true; when on: 30/day global, 3/session, 20 KB code, cut-off 2026-12-15. Samples are saved audits (app/samples/*.json, `python -m scripts.precompute_samples`), so viewing the demo makes no paid calls. Total Token Factory spend so far: ~$0.31 (Oct 6).
+- Tests: 71 offline + 7 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
 
 ## In progress
-- Nothing — next up is the report UI
+- Deploy to Streamlit Community Cloud (Alissa creates the app + pastes secrets; live runs stay off)
 
 ## Next
-1. Report UI + charts (sandbox returns signal-shift curves for the chart)
-2. Hosted demo URL, README, video, submission
+1. Deploy (Streamlit Community Cloud) and verify the public URL
+2. README (setup, how Nemotron/Token Factory/Sandboxes are used, model routing with measurements, disclaimer)
+3. Demo video (< 3 min), submission by Oct 29
+- Ask Nebius whether auto card charging can be turned off / a spend cap set
 
 ## Decisions
 - Track: Coding & Agentic Engineering

@@ -9,3 +9,4 @@ outputs/
 docs/reference/*
 !docs/reference/README.md
 .DS_Store
+.streamlit/secrets.toml

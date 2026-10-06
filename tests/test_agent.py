@@ -104,3 +104,10 @@ def test_planner_points_at_lookahead_block_every_time():
     # fair places to point; an incomplete plan (after retries) may have no findings, so allow at most one.
     lines = [{f["line"] for f in p["findings"]} for p in plans]
     assert sum(not (ls & {17, 18, 19, 20}) for ls in lines) <= 1, lines
+
+
+def test_noop_fixes_are_dropped():
+    from agent.interpreter import drop_noop_fixes
+    src = "a = 1\n    return signal\n"
+    fixes = [{"line": 2, "fix": "`return signal`"}, {"line": 2, "fix": "return signal.shift(1)"}]
+    assert drop_noop_fixes(fixes, src) == [{"line": 2, "fix": "return signal.shift(1)"}]

@@ -79,16 +79,11 @@ def main(argv=None) -> int:
             _emit({"ok": False, "stage": stage, "error": problem}, nonce)
             return 2
         stage = "audit"
-        from attacks.evidence import report_to_evidence
+        from attacks.evidence import report_curves, report_to_evidence
         from attacks.runner import run_audit
 
         report = run_audit(module, prices)
-        shift = next(r for r in report.results if r.name == "signal_shift")
-        curves = {
-            "dates": [str(d.date()) for d in shift.curves["original"].index],
-            "original": [round(float(x), 6) for x in shift.curves["original"]],  # chart only; keeps output small
-            "shifted": [round(float(x), 6) for x in shift.curves["shifted"]],
-        }
+        curves = report_curves(report)
         _emit({"ok": True, "evidence": report_to_evidence(report), "curves": curves}, nonce)
         return 0
     except (Exception, SystemExit) as exc:  # report user-code failures as data; SystemExit isn't an Exception

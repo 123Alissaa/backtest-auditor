@@ -33,5 +33,16 @@ def report_to_evidence(report: AuditReport) -> dict:
     })
 
 
+def report_curves(report: AuditReport) -> dict:
+    """Reported vs delayed equity curves from the signal-shift test, for the chart."""
+    shift = next(r for r in report.results if r.name == "signal_shift")
+    return {
+        "dates": [str(d.date()) for d in shift.curves["original"].index],
+        "original": [round(float(x), 6) for x in shift.curves["original"]],  # chart only; keeps output small
+        "shifted": [round(float(x), 6) for x in shift.curves["shifted"]],
+        "delay": shift.metrics.get("delay", "1 bar"),
+    }
+
+
 def evidence_json(report: AuditReport) -> str:
     return json.dumps(report_to_evidence(report), indent=2)

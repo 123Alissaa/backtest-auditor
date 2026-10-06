@@ -114,6 +114,13 @@ def unverified_numbers(text: str, evidence: dict) -> list[str]:
     return bad
 
 
+def drop_noop_fixes(fixes: list[dict], clean_source: str) -> list[dict]:
+    """Remove "fixes" that just repeat the code already on that line (seen: 'Line 20: return signal')."""
+    lines = clean_source.splitlines()
+    norm = lambda t: re.sub(r"[\s`]+", "", t)  # noqa: E731
+    return [f for f in fixes if not (1 <= f["line"] <= len(lines) and norm(f["fix"]) == norm(lines[f["line"] - 1]))]
+
+
 def interpret(clean_source: str, evidence: dict, plan: dict | None = None, model: str | None = None) -> dict:
     plan_view = None
     if plan:
@@ -137,7 +144,7 @@ def interpret(clean_source: str, evidence: dict, plan: dict | None = None, model
             overridden.append({"test": t["test"], "llm_said": t["verdict"], "actual": truth[t["test"]]})
             t["verdict"] = truth[t["test"]]
         t["lines"] = [n for n in t["lines"] if 1 <= n <= n_lines]
-    report["fixes"] = [f for f in report["fixes"] if 1 <= f["line"] <= n_lines]
+    report["fixes"] = drop_noop_fixes([f for f in report["fixes"] if 1 <= f["line"] <= n_lines], clean_source)
 
     all_text = " ".join([report["headline"], report["caveats"]] + [t["explanation"] for t in report["tests"]]
                         + [f["fix"] for f in report["fixes"]])

@@ -6,5 +6,5 @@ python-dotenv>=1.0
 contree-sdk==0.3.6  # pinned: API differs from the online docs (no separate contree_client)
 pytest>=8.0
 # Add when we get there (exact package names from official docs):
-# streamlit
+streamlit==1.65.0  # web UI (includes altair for the chart)
 # tavily-python
