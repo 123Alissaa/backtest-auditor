@@ -1,23 +1,23 @@
 # Submission checklist (from the hackathon rules — re-check against official-rules in docs/reference/)
 
 ## Build
-- [ ] Runs on Nebius Token Factory (or AI Cloud)
-- [ ] Uses at least one NVIDIA open source model (Nemotron)
-- [ ] Coding & Agentic Engineering fit: agent writes/runs/tests code in Token Factory Sandboxes
-- [ ] User code executes only in Sandboxes
+- [x] Runs on Nebius Token Factory (or AI Cloud)
+- [x] Uses at least one NVIDIA open source model (Nemotron)
+- [x] Coding & Agentic Engineering fit: agent writes/runs/tests code in Token Factory Sandboxes
+- [x] User code executes only in Sandboxes
 
 ## Repo
 - [x] Public GitHub repo
 - [x] Open source license (MIT) visible at the top of the repo page
-- [ ] README: setup + run instructions
-- [ ] README: how Nemotron is used (and why Nano vs Super/Ultra)
-- [ ] README: where Token Factory accelerated the workflow + other Nebius tools used
-- [ ] "Educational tool, not financial advice" in README and app
+- [x] README: setup + run instructions
+- [x] README: how Nemotron is used (and why Nano vs Super/Ultra)
+- [x] README: where Token Factory accelerated the workflow + other Nebius tools used
+- [x] "Educational tool, not financial advice" in README and app
 
 ## Submission form
 - [ ] Track selected: Coding and Agentic Engineering
 - [ ] Project description: what, why, how
-- [ ] Working demo URL (hosted app or test build)
+- [x] Working demo URL (hosted app or test build)
 - [ ] Demo video: public YouTube, ≤ 3 minutes, audio covers Token Factory + Nemotron usage
 - [ ] Feedback on Token Factory / Sandboxes / NVIDIA tools (from FEEDBACK_NOTES.md)
 - [ ] Pre-existing project explanation — N/A (started during submission period)

@@ -35,11 +35,12 @@ _Last updated: Oct 6, 2026_
 
 - Three-page app (Oct 6): Home landing page (pitch + 2 CTAs, money-shot tiles + chart, how-it-works strip, 8-card gallery "claims X%/yr -> honest Y%/yr" from saved sandbox evidence, why-trust section, footer), Examples (/examples?strategy=...), Audit your code (/audit). Top navigation bar. app/streamlit_app.py is now just the router; shared UI in app/ui.py; pages in app/home.py, app/examples.py, app/audit.py. Old /?strategy=X links forward to /examples.
 
+- README rewritten for judges (Oct 6): live link, landing screenshot (docs/img/landing.png), problem, Scan/Attack/Explain/Fix, gallery results table, 2-minute try-it path, mermaid flow, model routing + why the scan isn't an LLM, Sandboxes usage, guardrails, known limits, cost guards, run instructions.
+
 ## In progress
-- README
+- Demo video script
 
 ## Next
-1. README (setup, how Nemotron/Token Factory/Sandboxes are used, model routing with measurements, disclaimer)
 2. Demo video (< 3 min), submission by Oct 29
 - Free Streamlit apps sleep when idle (~30s wake): open the site before/through judging (Dec 1–15)
 - Ask Nebius whether auto card charging can be turned off / a spend cap set
