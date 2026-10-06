@@ -17,16 +17,19 @@ _Last updated: Oct 6, 2026_
 - Signal-shift calendar fix: weekday-only strategies are detected from their positions and delayed one week (same weekday) instead of one bar. Overfit's signal_shift is now PASS (was a false FAIL); lookahead + weekday filter is still caught.
 - Report UI (app/streamlit_app.py): sample picker + "your own strategy", verdict banner, metric tiles, reported-vs-delayed equity chart (validated palette, light + dark), four test cards, code view with flagged lines + fixes, "how this was checked" (Super's predictions vs actual, Nano explanations, guardrail counts, JSON download). Deep links: `?strategy=leaky`.
 - Shared pipeline (agent/pipeline.py): tests run in the sandbox FIRST, paid LLM calls only after they succeed.
-- Cost guards (agent/limits.py): live runs OFF unless LIVE_RUNS_ENABLED=true; when on: 30/day global, 3/session, 20 KB code, cut-off 2026-12-15. Samples are saved audits (app/samples/*.json, `python -m scripts.precompute_samples`), so viewing the demo makes no paid calls. Total Token Factory spend so far: ~$0.31 (Oct 6).
+- Cost guards (agent/limits.py): live runs OFF unless LIVE_RUNS_ENABLED=true; when on: measured LLM spend budget $0.20/day (token usage x catalog prices: Super $0.30/$0.90, Nano $0.06/$0.24 per M), 30 runs/day global, 3/session, 20 KB code, cut-off 2026-12-15. Worst case $0.20 x ~70 days = $14 < remaining credit. A live audit measured $0.0027 and 15s (Oct 6). Samples are saved audits (app/samples/*.json, `python -m scripts.precompute_samples`), so viewing the demo makes no paid calls. Total Token Factory spend so far: ~$0.31 (Oct 6).
 - Tests: 71 offline + 7 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
 
+- Deployed 2026-10-06: https://backtest-auditor.streamlit.app (Streamlit Community Cloud, Python 3.12, NO secrets/API keys, so the public site can't make paid calls). Verified all 4 samples + custom page in light and dark: no errors, live buttons disabled. Deep links: `?strategy=lookahead|leaky|overfit|honest`.
+
 ## In progress
-- Deploy to Streamlit Community Cloud (Alissa creates the app + pastes secrets; live runs stay off)
+- Public live runs: Alissa adds keys + LIVE_RUNS_ENABLED=true in Streamlit secrets (decided Oct 6: disabled buttons made the demo look static)
+- README
 
 ## Next
-1. Deploy (Streamlit Community Cloud) and verify the public URL
-2. README (setup, how Nemotron/Token Factory/Sandboxes are used, model routing with measurements, disclaimer)
-3. Demo video (< 3 min), submission by Oct 29
+1. README (setup, how Nemotron/Token Factory/Sandboxes are used, model routing with measurements, disclaimer)
+2. Demo video (< 3 min), submission by Oct 29
+- Free Streamlit apps sleep when idle (~30s wake): open the site before/through judging (Dec 1–15)
 - Ask Nebius whether auto card charging can be turned off / a spend cap set
 
 ## Decisions

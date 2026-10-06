@@ -43,6 +43,10 @@ def chat(messages: list[dict], model: str, **kwargs) -> ChatReply:
     if not model:
         raise RuntimeError("No model ID given. Set MODEL_FAST / MODEL_REASONING in .env from the Token Factory catalog.")
     resp = get_client().chat.completions.create(model=model, messages=messages, **kwargs)
+    usage = getattr(resp, "usage", None)
+    if usage is not None:  # every paid call is counted toward the public demo's daily budget
+        from agent.limits import price_of, record_spend
+        record_spend(price_of(model, usage.prompt_tokens or 0, usage.completion_tokens or 0))
     msg = resp.choices[0].message
     return ChatReply(content=(msg.content or "").strip(), reasoning=_extract_reasoning(msg), raw=resp)
 

@@ -2,12 +2,16 @@
 Nebius charges the card on file if the balance goes negative.
 
 Defaults are safe: live runs are OFF unless LIVE_RUNS_ENABLED=true. When on,
-every live run must pass all of: before the cut-off date, under the global daily
-cap (all visitors), under the per-session cap, and within the code-size limit.
+every live run must pass all of: before the cut-off date, under today's measured
+LLM spend budget (DAILY_BUDGET_USD), under the global daily run cap (all
+visitors), under the per-session cap, and within the code-size limit.
 
-The daily counter lives in a file so all sessions share it. A server restart can
-reset it, so the cap bounds spend per process-day rather than guaranteeing zero;
-the kill switch (LIVE_RUNS_ENABLED) is the real off button.
+Spend is measured, not estimated: agent.llm.chat reports each response's token
+usage, priced per model (config.model_prices), into a shared daily ledger file.
+Worst case = daily budget x days until LIVE_RUNS_UNTIL (e.g. $0.20 x ~70 = $14),
+which must stay below the remaining credit so the balance never goes negative.
+A server restart resets the ledger; restarts happen after idle periods, when
+nothing is being spent. The kill switch (LIVE_RUNS_ENABLED) is the real off button.
 """
 import json
 import tempfile
@@ -39,9 +43,33 @@ def _read(path: Path) -> dict:
         return {}
 
 
-def runs_today(path: Path = COUNTER_FILE) -> int:
+def _ledger(path: Path) -> dict:
     data = _read(path)
-    return int(data.get("count", 0)) if data.get("day") == _today().isoformat() else 0
+    if data.get("day") != _today().isoformat():
+        return {"day": _today().isoformat(), "count": 0, "spend": 0.0}
+    return {"day": data["day"], "count": int(data.get("count", 0)), "spend": float(data.get("spend", 0.0))}
+
+
+def runs_today(path: Path = COUNTER_FILE) -> int:
+    return _ledger(path)["count"]
+
+
+def spend_today(path: Path = COUNTER_FILE) -> float:
+    return _ledger(path)["spend"]
+
+
+def price_of(model: str, prompt_tokens: int, completion_tokens: int, cfg=settings) -> float:
+    rates = {m: (i, o) for m, i, o in cfg.model_prices}
+    rate_in, rate_out = rates.get(model, cfg.fallback_price)
+    return (prompt_tokens * rate_in + completion_tokens * rate_out) / 1_000_000
+
+
+def record_spend(usd: float, path: Path = COUNTER_FILE) -> None:
+    """Add measured LLM spend to today's ledger (called by agent.llm.chat for every response)."""
+    with _LOCK:
+        led = _ledger(path)
+        led["spend"] = round(led["spend"] + usd, 8)
+        path.write_text(json.dumps(led))
 
 
 def check_live_run(session_runs: int, code: str = "", cfg=settings, path: Path = COUNTER_FILE) -> Decision:
@@ -55,7 +83,7 @@ def check_live_run(session_runs: int, code: str = "", cfg=settings, path: Path =
         return Decision(False, f"Strategy code is limited to {cfg.max_code_bytes // 1000} KB.")
     if session_runs >= cfg.session_live_run_cap:
         return Decision(False, f"You've used all {cfg.session_live_run_cap} live audits for this session.")
-    if runs_today(path) >= cfg.daily_live_run_cap:
+    if runs_today(path) >= cfg.daily_live_run_cap or spend_today(path) >= cfg.daily_budget_usd:
         return Decision(False, "Today's live audits for this demo are used up. Try again tomorrow.")
     return Decision(True)
 
@@ -63,8 +91,9 @@ def check_live_run(session_runs: int, code: str = "", cfg=settings, path: Path =
 def reserve_live_run(cfg=settings, path: Path = COUNTER_FILE) -> bool:
     """Atomically take one slot of today's global cap. Call right before starting a live audit."""
     with _LOCK:
-        count = runs_today(path)
-        if count >= cfg.daily_live_run_cap:
+        led = _ledger(path)
+        if led["count"] >= cfg.daily_live_run_cap or led["spend"] >= cfg.daily_budget_usd:
             return False
-        path.write_text(json.dumps({"day": _today().isoformat(), "count": count + 1}))
+        led["count"] += 1
+        path.write_text(json.dumps(led))
         return True

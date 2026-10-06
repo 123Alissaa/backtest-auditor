@@ -24,6 +24,15 @@ class Settings:
     daily_live_run_cap: int = int(os.getenv("DAILY_LIVE_RUN_CAP", "30"))     # across all visitors
     session_live_run_cap: int = int(os.getenv("SESSION_LIVE_RUN_CAP", "3"))  # per browser session
     max_code_bytes: int = int(os.getenv("MAX_CODE_BYTES", "20000"))
+    daily_budget_usd: float = float(os.getenv("DAILY_BUDGET_USD", "0.20"))    # hard stop on measured LLM spend/day
+    # USD per million tokens (input, output), from GET /v1/models?verbose=true on 2026-10-06.
+    # Unknown models are priced at the most expensive Nemotron (Ultra) so the budget errs on the safe side.
+    model_prices: tuple = (
+        ("nvidia/nemotron-3-super-120b-a12b", 0.30, 0.90),
+        ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", 0.06, 0.24),
+        ("nvidia/Nemotron-3-Ultra-550b-a55b", 1.00, 3.00),
+    )
+    fallback_price: tuple = (1.00, 3.00)
     max_price_rows: int = int(os.getenv("MAX_PRICE_ROWS", "10000"))
 
 
