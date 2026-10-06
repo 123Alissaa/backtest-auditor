@@ -30,7 +30,8 @@ def test_custom_page_renders_with_run_disabled(monkeypatch):
     monkeypatch.delenv("LIVE_RUNS_ENABLED", raising=False)
     at = _run("Your own strategy")
     assert not at.exception, [e.value for e in at.exception]
-    assert at.text_area[0].value.startswith("import pandas")
+    assert at.text_area(key="custom_code").value.startswith("import pandas")
+    assert any("How to write a strategy" in m.value for m in at.markdown)
     assert [b.disabled for b in at.button if b.label == "Run audit"] == [True]
 
 
@@ -52,3 +53,18 @@ def test_hero_and_picker():
 def test_unknown_deep_link_falls_back_to_first_sample():
     at = _run("no-such-strategy")
     assert not at.exception and at.session_state["choice"] == "lookahead"
+
+
+def test_cta_opens_custom_page():
+    at = _run("lookahead")
+    at.button(key="cta_custom").click().run()
+    assert not at.exception and at.session_state["choice"] == "Your own strategy"
+    assert any(m.value == "### Audit your own strategy" for m in at.markdown)
+
+
+def test_start_from_example_loads_code_without_hints():
+    at = _run("Your own strategy")
+    at.selectbox(key="starter").set_value("lookahead").run()
+    code = at.text_area(key="custom_code").value
+    assert not at.exception and "def run(" in code and "signal = (c > sma)" in code
+    assert "BUG" not in code and "PLANTED_BUG" not in code and "\n\n\n" not in code

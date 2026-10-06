@@ -8,6 +8,7 @@ Live audits are OFF unless LIVE_RUNS_ENABLED=true and are capped (agent/limits.p
 User code is never executed here: it is only parsed, or sent to a Token Factory Sandbox.
 """
 import html
+import inspect
 import io
 import json
 import os
@@ -562,6 +563,46 @@ PILL_LABELS = {"lookahead": "Lookahead 50%/yr", "leaky": "Leaky", "overfit": "Ov
                "honest": "Honest SMA", "honest_rsi": "Honest RSI", CUSTOM: "✎ Audit your own code"}
 
 
+STARTERS = {"template": "Template: honest 10/50 crossover"} | {k: f"Example: {v}" for k, v in SAMPLES.items()}
+
+GUIDE = """
+**How to write a strategy**
+
+- `prices` is a pandas DataFrame with a daily `DatetimeIndex` and a `close` column.
+- Return a pandas Series of daily **positions** on the same index: `0` = cash, `1` = fully long
+  (values are clipped to −1…1, so negatives are shorts).
+- **Timing:** the position on day *t* is held from yesterday's close to today's close, so it may only use data
+  up to yesterday. Usually that means ending with `.shift(1)`.
+- Optional: `DESCRIPTION = "..."`; if you searched over settings, add `PARAM_GRID` (a list of dicts) and
+  `positions_for(prices, **params)` so the overfitting tests can check the search.
+- Allowed imports: `pandas`, `numpy`, the standard library. Up to 20 KB of code.
+- Your code runs **only** inside an isolated Nebius Token Factory Sandbox, never on this server.
+  Each visitor gets 3 live audits.
+"""
+
+
+def starter_code(key: str) -> str:
+    """Editor starting point. Samples load with comments/docstrings removed, so the audit has to find the bug."""
+    if key == "template":
+        return TEMPLATE
+    from agent.sanitize import strip_hints
+    from strategies import STRATEGIES
+    lines = strip_hints(inspect.getsource(STRATEGIES[key])).splitlines()
+    out = []
+    for line in lines:  # collapse the blank runs left by removed comments
+        if line.strip() or (out and out[-1].strip()):
+            out.append(line)
+    return "\n".join(out).strip() + "\n"
+
+
+def _load_starter():
+    st.session_state["custom_code"] = starter_code(st.session_state["starter"])
+
+
+def _go_custom():
+    st.session_state["choice"] = CUSTOM
+
+
 def _pick(widget_key: str):
     value = st.session_state.get(widget_key)
     if value in OPTIONS:  # pills can be clicked off (None): keep the current choice
@@ -592,6 +633,8 @@ def main():
                    "has a real edge on it.")
 
     st.markdown(HERO, unsafe_allow_html=True)
+    if choice != CUSTOM:
+        st.button("✎ Try your own strategy →", type="primary", on_click=_go_custom, key="cta_custom")
     st.pills("Try an example: classic bugs · real-world mistakes · honest strategies", OPTIONS, key="pick_pills",
              on_change=_pick, args=("pick_pills",), format_func=lambda k: PILL_LABELS[k])
 
@@ -622,10 +665,15 @@ def main():
         return
 
     st.markdown("### Audit your own strategy")
-    st.markdown("Write a `run(prices)` function that returns daily positions (0 = cash, 1 = fully long). "
-                "Optional: `PARAM_GRID` + `positions_for(prices, **params)` if you searched over settings, "
-                "so the overfitting tests can check the search. Your code runs only inside an isolated sandbox.")
-    code = st.text_area("Strategy code", TEMPLATE, height=320, label_visibility="collapsed")
+    st.session_state.setdefault("custom_code", TEMPLATE)
+    st.selectbox("Start from", list(STARTERS), key="starter", format_func=lambda k: STARTERS[k],
+                 on_change=_load_starter,
+                 help="Load one of the examples (comments removed), audit it, then edit the bug away and re-run.")
+    editor, guide = st.columns([3, 2])
+    with editor:
+        code = st.text_area("Strategy code", key="custom_code", height=380, label_visibility="collapsed")
+    with guide:
+        st.markdown(GUIDE)
     c1, c2 = st.columns([1, 2])
     with c1:
         data = st.radio("Price data", ["Synthetic (random walk)", "Upload CSV"], horizontal=False)
