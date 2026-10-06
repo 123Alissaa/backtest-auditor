@@ -18,12 +18,14 @@ _Last updated: Oct 6, 2026_
 - Report UI (app/streamlit_app.py): sample picker + "your own strategy", verdict banner, metric tiles, reported-vs-delayed equity chart (validated palette, light + dark), four test cards, code view with flagged lines + fixes, "how this was checked" (Super's predictions vs actual, Nano explanations, guardrail counts, JSON download). Deep links: `?strategy=leaky`.
 - Shared pipeline (agent/pipeline.py): tests run in the sandbox FIRST, paid LLM calls only after they succeed.
 - Cost guards (agent/limits.py): live runs OFF unless LIVE_RUNS_ENABLED=true; when on: measured LLM spend budget $0.20/day (token usage x catalog prices: Super $0.30/$0.90, Nano $0.06/$0.24 per M), 30 runs/day global, 3/session, 20 KB code, cut-off 2026-12-15. Worst case $0.20 x ~70 days = $14 < remaining credit. A live audit measured $0.0027 and 15s (Oct 6). Samples are saved audits (app/samples/*.json, `python -m scripts.precompute_samples`), so viewing the demo makes no paid calls. Total Token Factory spend so far: ~$0.31 (Oct 6).
-- Tests: 86 offline + 7 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
+- Tests: 88 offline + 7 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
 
 - Deployed 2026-10-06: https://backtest-auditor.streamlit.app (Streamlit Community Cloud, Python 3.12, NO secrets/API keys, so the public site can't make paid calls). Verified all 4 samples + custom page in light and dark: no errors, live buttons disabled. Deep links: `?strategy=lookahead|leaky|overfit|honest`.
 
-- Public live runs ON (Oct 6): keys + LIVE_RUNS_ENABLED=true in Streamlit secrets; verified a live audit on the public site. After changing secrets, REBOOT the app (settings are read at startup).
+- Public live runs ON (Oct 6): keys + LIVE_RUNS_ENABLED=true in Streamlit secrets; verified a live audit on the public site. After changing secrets OR pushing code, REBOOT the app (Streamlit Cloud re-runs the script without restarting Python, so already-imported modules stay stale; a push broke the site with an ImportError on Oct 6 until rebooted).
 - "Fix it" agent loop (agent/fixer.py): Super writes 2 minimal fixes -> free pre-checks (parses, keeps run(), no new imports, no high-confidence rule hits, >=55% similar) -> each fix runs all 4 tests in its own branch of one sandbox snapshot (Contree branching, parallel) -> accepted only if delay + hide-the-future PASS, nothing FAILs, still trades >=5% of days -> else one retry round with failures as feedback. Overfitting is explained, not "fixed". Saved fixes for lookahead + leaky (`precompute_samples --fix-only`); live fix of an unseen centered-window strategy: 33s, one-line diff. ~$0.002 per fix.
+
+- First screen (Oct 6): hero with one-line pitch + 4-step strip (Scan, Attack, Explain, Fix, each naming its Nebius/NVIDIA tool), "Built with" line, example pills in the main area (sidebar is hidden on phones), synced with sidebar + ?strategy=. Verdict banner visible without scrolling at 1400x900; steps stack 2x2 at phone width.
 
 ## In progress
 - README

@@ -37,3 +37,17 @@ def test_lookahead_sample_tells_the_story():
     at = _run("lookahead")
     values = {m.label: m.value for m in at.metric}
     assert values["Reported Sharpe"] == "3.43" and values["Sharpe when trades are delayed"] == "0.14"
+
+
+def test_hero_and_picker():
+    at = _run("lookahead")
+    assert any("Is your backtest lying?" in m.value for m in at.markdown)
+    at.radio(key="pick_sidebar").set_value("leaky").run()
+    assert not at.exception
+    assert any(m.value == "### Leaky: smoothed trend" for m in at.markdown)
+    assert at.session_state["choice"] == "leaky" and at.query_params["strategy"] in ("leaky", ["leaky"])
+
+
+def test_unknown_deep_link_falls_back_to_first_sample():
+    at = _run("no-such-strategy")
+    assert not at.exception and at.session_state["choice"] == "lookahead"

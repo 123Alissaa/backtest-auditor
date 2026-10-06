@@ -125,6 +125,22 @@ CSS = """
 .ba-diff .hunk {opacity: .5;}
 .ba-attempt {display: flex; gap: 10px; align-items: baseline; padding: 4px 0; font-size: .9rem;}
 .ba-attempt .why {opacity: .7; font-size: .82rem;}
+[data-testid="stMainBlockContainer"] {padding-top: 3.8rem;}
+.ba-hero {border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 12px;
+  padding: 18px 22px 14px; margin-bottom: 6px;}
+.ba-hero h1 {font-size: 1.9rem; margin: 0 0 4px; padding: 0; line-height: 1.2;}
+.ba-hero .pitch {font-size: 1rem; opacity: .85; margin-bottom: 14px; max-width: 62rem; line-height: 1.45;}
+.ba-steps {display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;}
+.ba-steps .s {border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, currentColor 5%, transparent);}
+.ba-steps .n {display: inline-flex; width: 1.5em; height: 1.5em; border-radius: 50%; align-items: center;
+  justify-content: center; background: #3987e5; color: #fff; font-weight: 700; font-size: .8rem; margin-right: 6px;}
+.ba-steps .t {font-weight: 700; font-size: .92rem;}
+.ba-steps .d {font-size: .8rem; opacity: .75; margin-top: 3px; line-height: 1.35;}
+.ba-built {font-size: .78rem; opacity: .65; margin-top: 10px;}
+@media (max-width: 760px) {
+  .ba-steps {grid-template-columns: 1fr 1fr;}
+  .ba-hero h1 {font-size: 1.5rem;}
+}
 .stTextArea textarea {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;}
 </style>
 """
@@ -501,13 +517,14 @@ def render_report(result: dict, prices: pd.DataFrame | None = None, fix_key: str
 
 # ---------- page ----------
 
-def live_button(label: str, code: str, key: str) -> bool:
+def live_button(label: str, code: str, key: str, note=None) -> bool:
+    """Gated live-run button. `note`: where to show why it's disabled (defaults to right below it)."""
     runs = st.session_state.setdefault("live_runs", 0)
     decision = check_live_run(runs, code)
     clicked = st.button(label, key=key, type="primary", disabled=not decision.allowed,
                         help=None if decision.allowed else decision.reason)
     if not decision.allowed:
-        st.caption(decision.reason)
+        (note or st).caption(decision.reason)
     if clicked:
         if not reserve_live_run():
             st.warning("Today's live audits for this demo are used up. Try again tomorrow.")
@@ -517,27 +534,61 @@ def live_button(label: str, code: str, key: str) -> bool:
     return False
 
 
+HERO = """
+<div class="ba-hero">
+  <h1>Is your backtest lying?</h1>
+  <div class="pitch">Paste a trading strategy. We run it in an isolated Nebius sandbox, attack it four ways, and
+  NVIDIA Nemotron explains, and fixes, what's wrong. Every verdict comes from the tests, never from the AI.</div>
+  <div class="ba-steps">
+    <div class="s"><span class="n">1</span><span class="t">Scan</span>
+      <div class="d">Rules flag known leak patterns. No AI, instant.</div></div>
+    <div class="s"><span class="n">2</span><span class="t">Attack</span>
+      <div class="d">4 tests run on the strategy in a Token Factory Sandbox.</div></div>
+    <div class="s"><span class="n">3</span><span class="t">Explain</span>
+      <div class="d">Nemotron Super reads the code and the evidence; Nano explains rule hits.</div></div>
+    <div class="s"><span class="n">4</span><span class="t">Fix</span>
+      <div class="d">Nemotron writes fixes; parallel sandbox branches prove which one works.</div></div>
+  </div>
+  <div class="ba-built">Built with Nebius Token Factory · Token Factory Sandboxes · NVIDIA Nemotron Super &amp; Nano</div>
+</div>
+"""
+OPTIONS = list(SAMPLES) + [CUSTOM]
+PILL_LABELS = {"lookahead": "Lookahead 50%/yr", "leaky": "Leaky", "overfit": "Overfit", "honest": "Honest",
+               CUSTOM: "✎ Audit your own code"}
+
+
+def _pick(widget_key: str):
+    value = st.session_state.get(widget_key)
+    if value in OPTIONS:  # pills can be clicked off (None): keep the current choice
+        st.session_state["choice"] = value
+
+
+def current_choice() -> str:
+    """One choice shared by the main-area pills, the sidebar list and the URL (?strategy=...)."""
+    if "choice" not in st.session_state:
+        wanted = st.query_params.get("strategy", OPTIONS[0])
+        st.session_state["choice"] = wanted if wanted in OPTIONS else OPTIONS[0]
+    choice = st.session_state["choice"]
+    st.session_state["pick_pills"] = choice
+    st.session_state["pick_sidebar"] = choice
+    st.query_params["strategy"] = choice
+    return choice
+
+
 def main():
     st.markdown(CSS, unsafe_allow_html=True)
+    choice = current_choice()
     with st.sidebar:
         st.markdown("## 🔍 Backtest Auditor")
-        st.caption("Is your backtest lying? Checks trading-strategy code for lookahead, data leakage and "
-                   "overfitting.")
-        options = list(SAMPLES) + [CUSTOM]
-        wanted = st.query_params.get("strategy", options[0])  # deep links, e.g. ?strategy=leaky
-        choice = st.radio("Strategy", options, index=options.index(wanted) if wanted in options else 0,
-                          format_func=lambda k: SAMPLES.get(k, k))
-        st.query_params["strategy"] = choice
+        st.radio("Strategy", OPTIONS, key="pick_sidebar", on_change=_pick, args=("pick_sidebar",),
+                 format_func=lambda k: SAMPLES.get(k, k))
         st.divider()
-        with st.expander("How it works"):
-            st.markdown(
-                "1. **Rules** scan the code for known leak patterns (no AI).\n"
-                "2. The strategy runs in an isolated **Nebius Token Factory Sandbox** against four attack tests.\n"
-                "3. **NVIDIA Nemotron Nano** explains rule hits; **Nemotron Super** reads the code, predicts the "
-                "results and finally explains them.\n"
-                "4. Verdicts and numbers always come from the tests, never from the AI.")
         st.caption("⚠️ Educational tool, not financial advice. Sample data is synthetic (random), so no strategy "
                    "has a real edge on it.")
+
+    st.markdown(HERO, unsafe_allow_html=True)
+    st.pills("Try an example", OPTIONS, key="pick_pills", on_change=_pick, args=("pick_pills",),
+             format_func=lambda k: PILL_LABELS[k])
 
     if choice != CUSTOM:
         result = load_sample(choice)
@@ -547,9 +598,13 @@ def main():
             return
         st.caption(result.get("description", ""))
         live_key = f"live_{choice}"
-        with st.expander("Audit pipeline", expanded=False):
+        pipe, btn = st.columns([4, 1], vertical_alignment="top")
+        note = st.empty()  # full-width line for "why live runs are unavailable"
+        with pipe.expander("Audit pipeline and timings", expanded=False):
             render_steps(result.get("timings", {}), result.get("generated_at"))
-        if live_button("Re-run this audit live", result["source"], key=f"btn_{choice}"):
+        with btn:
+            rerun = live_button("Re-run live", result["source"], key=f"btn_{choice}", note=note)
+        if rerun:
             from strategies import STRATEGIES
             from agent.pipeline import sample_source
             live = run_live(sample_source(STRATEGIES[choice]), default_prices(result.get("seed", 7)))
