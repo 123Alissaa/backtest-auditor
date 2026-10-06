@@ -18,7 +18,7 @@ _Last updated: Oct 6, 2026_
 - Report UI (app/streamlit_app.py): sample picker + "your own strategy", verdict banner, metric tiles, reported-vs-delayed equity chart (validated palette, light + dark), four test cards, code view with flagged lines + fixes, "how this was checked" (Super's predictions vs actual, Nano explanations, guardrail counts, JSON download). Deep links: `?strategy=leaky`.
 - Shared pipeline (agent/pipeline.py): tests run in the sandbox FIRST, paid LLM calls only after they succeed.
 - Cost guards (agent/limits.py): live runs OFF unless LIVE_RUNS_ENABLED=true; when on: measured LLM spend budget $0.20/day (token usage x catalog prices: Super $0.30/$0.90, Nano $0.06/$0.24 per M), 30 runs/day global, 3/session, 20 KB code, cut-off 2026-12-15. Worst case $0.20 x ~70 days = $14 < remaining credit. A live audit measured $0.0027 and 15s (Oct 6). Samples are saved audits (app/samples/*.json, `python -m scripts.precompute_samples`), so viewing the demo makes no paid calls. Total Token Factory spend so far: ~$0.31 (Oct 6).
-- Tests: 106 offline + 11 opt-in (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
+- Tests: 106 offline + 11 opt-in (page tests rewritten for the 3-page app) (`RUN_SANDBOX_TESTS=1 pytest -m sandbox`, `RUN_LLM_TESTS=1 pytest -m llm`)
 
 - Deployed 2026-10-06: https://backtest-auditor.streamlit.app (Streamlit Community Cloud, Python 3.12, NO secrets/API keys, so the public site can't make paid calls). Verified all 4 samples + custom page in light and dark: no errors, live buttons disabled. Deep links: `?strategy=lookahead|leaky|overfit|honest`.
 
@@ -32,6 +32,8 @@ _Last updated: Oct 6, 2026_
 - Fix acceptance: hide-the-future must PASS, no test FAILs; delay test may WARN (it's noisy for short-term honest signals on random data; requiring PASS had rejected the correct minimal next_day fix).
 
 - "Try your own" path made obvious (Oct 6): primary "✎ Try your own strategy →" button under the hero; custom page has "Start from" (template or any example, loaded without hint comments) + a "How to write a strategy" guide next to the editor. Judge flow: load Lookahead → Run audit → see line 18 → add .shift(1) → re-run → PASS (or click Fix it).
+
+- Three-page app (Oct 6): Home landing page (pitch + 2 CTAs, money-shot tiles + chart, how-it-works strip, 8-card gallery "claims X%/yr -> honest Y%/yr" from saved sandbox evidence, why-trust section, footer), Examples (/examples?strategy=...), Audit your code (/audit). Top navigation bar. app/streamlit_app.py is now just the router; shared UI in app/ui.py; pages in app/home.py, app/examples.py, app/audit.py. Old /?strategy=X links forward to /examples.
 
 ## In progress
 - README
