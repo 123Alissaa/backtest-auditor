@@ -37,8 +37,10 @@ _Last updated: Oct 6, 2026_
 
 - README rewritten for judges (Oct 6): live link, landing screenshot (docs/img/landing.png), problem, Scan/Attack/Explain/Fix, gallery results table, 2-minute try-it path, mermaid flow, model routing + why the scan isn't an LLM, Sandboxes usage, guardrails, known limits, cost guards, run instructions.
 
+- Demo video script (docs/reference/DEMO_SCRIPT.md (local only), 2:50, ~330 words) and Devpost submission text (docs/reference/SUBMISSION.md (local only): description, testing instructions, feedback) written Oct 6.
+
 ## In progress
-- Demo video script
+- Alissa: record + upload video (public YouTube), submit on Devpost
 
 ## Next
 2. Demo video (< 3 min), submission by Oct 29
